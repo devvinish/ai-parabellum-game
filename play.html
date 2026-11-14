@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Parabellum: Fallen City</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2305070a%27/%3E%3Cpath d=%27M16 5 27 27H5Z%27 fill=%27none%27 stroke=%27%23f2a541%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
+<style>
+:root{--ink:#e9edf0;--mute:#9aa7b2;--amber:#f2a541;--red:#ff4a3d;--cyan:#7fd6e6;--panel:rgba(8,11,15,.74);--line:#2c3842;--font:"Chakra Petch","Arial Narrow",system-ui,sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#05070a;color:var(--ink);font-family:var(--font);overflow:hidden;user-select:none;-webkit-user-select:none}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+button{font:600 14px var(--font);letter-spacing:.12em;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:11px 18px;cursor:pointer}
+button:hover,button:focus-visible{border-color:var(--amber);color:var(--amber);outline:none}
+button.primary{background:var(--amber);color:#120d05;border-color:var(--amber);font-size:16px;padding:14px 34px}
+button.primary:hover{background:#ffbe63;color:#120d05}
+.overlay{position:fixed;inset:0;display:grid;place-items:center;z-index:20;padding:24px}
+.hidden{display:none!important}
+/* loading */
+#load{background:#05070a;z-index:30;transition:opacity .8s}
+#load.done{opacity:0;pointer-events:none}
+.logo{font-weight:700;font-size:clamp(34px,6.4vw,76px);letter-spacing:.08em;line-height:1;text-align:center}
+.logo span{color:var(--amber)}
+.tag{letter-spacing:.45em;font-size:13px;color:var(--mute);text-align:center;margin-top:12px}
+.track{width:min(360px,70vw);height:3px;background:#1c242b;margin:26px auto 12px}
+#bar{height:100%;width:0;background:var(--amber);transition:width .2s}
+#msg{font-size:12px;color:var(--mute);letter-spacing:.14em;text-align:center}
+/* title */
+#title{background:linear-gradient(90deg,rgba(3,5,8,.92) 0%,rgba(3,5,8,.55) 45%,rgba(3,5,8,0) 75%);place-items:center start;padding-left:max(24px,7vw)}
+.tbox{max-width:520px}
+.tbox .logo{text-align:left}.tbox .tag{text-align:left;margin:14px 0 30px}
+.mission{border-left:2px solid var(--amber);padding:6px 0 6px 16px;margin-bottom:28px}
+.mission b{display:block;font-size:12px;letter-spacing:.3em;color:var(--amber);margin-bottom:6px}
+.mission p{margin:0;font:15px/1.55 system-ui,sans-serif;color:#c9d1d8}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font:13px/1.4 system-ui,sans-serif;color:var(--mute);margin-top:26px}
+.keys kbd{font:600 11px var(--font);letter-spacing:.08em;color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:2px 6px;background:rgba(255,255,255,.04);white-space:nowrap}
+.note{font:12px system-ui,sans-serif;color:#7c8a95;margin-top:16px}
+/* hud */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+#obj{position:absolute;left:max(18px,env(safe-area-inset-left));top:max(16px,env(safe-area-inset-top));background:var(--panel);border-left:2px solid var(--amber);padding:9px 14px 10px;min-width:230px;max-width:340px}
+#obj small{display:block;font-size:10px;letter-spacing:.32em;color:var(--amber)}
+#objText{font-weight:600;font-size:15px;letter-spacing:.04em;margin-top:3px}
+#objSub{font:12px system-ui,sans-serif;color:var(--mute);margin-top:3px}
+#banner{position:absolute;left:50%;top:16vh;transform:translateX(-50%);text-align:center;opacity:0;transition:opacity .5s;white-space:nowrap}
+#banner b{display:block;font-size:clamp(26px,4vw,46px);letter-spacing:.14em;text-shadow:0 2px 20px #000}
+#banner span{display:block;font-size:13px;letter-spacing:.4em;color:var(--amber);margin-top:8px;text-shadow:0 1px 10px #000}
+#banner.red b{color:var(--red)}
+#stats{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(18px,env(safe-area-inset-bottom));width:300px;background:var(--panel);padding:10px 14px 12px;border-top:1px solid var(--line)}
+.lbl{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.22em;color:var(--mute);margin:6px 0 4px}
+.lbl b{color:var(--ink);font-size:13px;letter-spacing:.06em}
+.meter{height:7px;background:#1a2229;position:relative;overflow:hidden}
+.meter i{position:absolute;inset:0 auto 0 0;width:100%;background:var(--ink);transition:width .12s}
+#armor i{background:linear-gradient(90deg,#d9e2e8,#ffffff)}
+#armor.low i{background:var(--red);animation:blink .5s infinite}
+#heat i{background:linear-gradient(90deg,#f2a541,#ff4a3d)}
+#heat.lock i{animation:blink .25s infinite}
+@keyframes blink{50%{opacity:.35}}
+#rk{display:flex;gap:4px;margin-top:4px}
+#rk i{flex:1;height:7px;background:var(--amber)}
+#rk i.off{background:#2a3138}
+#unit{font-size:10px;letter-spacing:.3em;color:var(--cyan);margin-bottom:2px}
+#radar{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));width:170px;height:170px;border-radius:50%;background:rgba(6,10,14,.7);border:1px solid var(--line)}
+#xhair{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px}
+#xhair.on path,#xhair.on circle{stroke:var(--red)}
+#hitmark{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;opacity:0;transition:opacity .15s}
+#prompt{position:absolute;left:50%;top:62%;transform:translateX(-50%);text-align:center;background:var(--panel);border:1px solid var(--amber);padding:9px 18px 10px;min-width:260px}
+#prompt b{font-size:15px;letter-spacing:.14em;color:var(--amber)}
+#prompt kbd{font:700 13px var(--font);border:1px solid var(--amber);border-radius:3px;padding:1px 7px;margin-right:6px;color:var(--ink)}
+#promptBar{height:3px;background:#2a2116;margin-top:8px}#promptBar i{display:block;height:100%;width:0;background:var(--amber)}
+#hint{position:absolute;left:50%;bottom:max(24px,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:min(560px,80vw);text-align:center;font:14px/1.45 system-ui,sans-serif;color:#dfe5ea;background:var(--panel);padding:9px 16px;border:1px solid var(--line);opacity:0;transition:opacity .4s}
+#markers{position:absolute;inset:0}
+.mk{position:absolute;transform:translate(-50%,-100%);font-size:11px;letter-spacing:.2em;color:var(--amber);text-align:center;text-shadow:0 1px 6px #000;white-space:nowrap}
+.mk:before{content:"";display:block;width:12px;height:12px;margin:0 auto 4px;border:2px solid var(--amber);transform:rotate(45deg)}
+.mk.pulse:before{animation:blink .7s infinite}
+.hb{position:absolute;width:64px;height:4px;transform:translate(-50%,-100%);background:rgba(0,0,0,.55);border:1px solid rgba(255,80,60,.5)}
+.hb i{display:block;height:100%;background:var(--red)}
+.hb.titan{width:120px;height:6px}
+.dmg{position:absolute;opacity:0;transition:opacity .35s}
+#dmgL{left:0;top:20%;bottom:20%;width:90px;background:linear-gradient(90deg,rgba(255,40,20,.55),transparent)}
+#dmgR{right:0;top:20%;bottom:20%;width:90px;background:linear-gradient(270deg,rgba(255,40,20,.55),transparent)}
+#dmgF{top:0;left:25%;right:25%;height:70px;background:linear-gradient(180deg,rgba(255,40,20,.5),transparent)}
+#dmgB{bottom:0;left:25%;right:25%;height:70px;background:linear-gradient(0deg,rgba(255,40,20,.5),transparent)}
+#lockHint{position:absolute;left:50%;top:40%;transform:translateX(-50%);font-size:13px;letter-spacing:.25em;color:var(--mute);background:var(--panel);padding:8px 16px;border:1px solid var(--line)}
+/* pause / end */
+#pause,#end{background:rgba(3,5,8,.78);backdrop-filter:blur(3px)}
+.card{width:min(460px,100%);background:rgba(8,11,15,.94);border:1px solid var(--line);padding:26px 28px;text-align:center}
+.card h2{margin:0 0 6px;font-size:28px;letter-spacing:.14em}
+.card h2.win{color:var(--amber)}.card h2.lose{color:var(--red)}
+.card p{font:14px/1.5 system-ui,sans-serif;color:var(--mute);margin:0 0 18px}
+.card .row{justify-content:center}
+.card .stack{display:grid;gap:10px}
+.st{display:grid;grid-template-columns:1fr auto;gap:6px 20px;text-align:left;font-size:14px;letter-spacing:.06em;margin:4px 0 22px;border-top:1px solid var(--line);padding-top:14px}
+.st span{color:var(--mute)}
+#cred{position:fixed;inset:auto 16px 16px auto;width:min(440px,calc(100vw - 32px));max-height:70vh;overflow:auto;background:rgba(8,11,14,.96);border:1px solid var(--line);border-radius:4px;padding:14px 16px;z-index:40;font:13px/1.5 system-ui,sans-serif;color:var(--mute)}
+#cred h2{font:600 14px var(--font);letter-spacing:.12em;color:var(--ink);margin:0 0 8px}#cred a{color:#9fd3dc}#cred li{margin-bottom:4px}
+@media (max-width:700px){#stats{width:200px}#radar{width:120px;height:120px}#obj{min-width:0;max-width:60vw}.keys{display:none}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="load" class="overlay"><div><div class="logo">AI <span>PARABELLUM</span></div><div class="tag">PREPARE FOR WAR</div><div class="track"><div id="bar"></div></div><div id="msg">LOADING FALLEN CITY</div></div></div>
+
+<div id="title" class="overlay hidden"><div class="tbox">
+  <div class="logo">AI <span>PARABELLUM</span></div><div class="tag">MISSION 1 · FALLEN CITY</div>
+  <div class="mission"><b>BRIEFING</b><p>The AI took the city in one night. You hold a captured striker at the south end of the main street. Push north, break their patrols, and when one of their machines overheats, climb in and make it yours.</p></div>
+  <div class="row"><button id="bPlay" class="primary" type="button">DEPLOY</button><button id="bQual" type="button">QUALITY: HIGH</button><button id="bCredT" type="button">CREDITS</button></div>
+  <div class="keys">
+    <kbd>W A S D</kbd><span>walk · <kbd>SHIFT</kbd> run</span>
+    <kbd>MOUSE</kbd><span>aim (click the screen to lock it) · arrow keys also turn and walk</span>
+    <kbd>LEFT CLICK · SPACE</kbd><span>arm cannons (watch the heat)</span>
+    <kbd>RIGHT CLICK · Q</kbd><span>shoulder rockets · <kbd>R</kbd> reload</span>
+    <kbd>HOLD E</kbd><span>hijack an overheated AI mech</span>
+    <kbd>ESC</kbd><span>pause · <kbd>M</kbd> mute</span>
+  </div>
+  <div class="note" id="touchNote" hidden>This mission needs a keyboard and mouse. Touch controls come later.</div>
+</div></div>
+
+<div id="hud" class="hidden">
+  <div id="obj"><small>OBJECTIVE</small><div id="objText"></div><div id="objSub"></div></div>
+  <div id="banner"><b></b><span></span></div>
+  <div id="markers"></div>
+  <svg id="xhair" viewBox="0 0 44 44" fill="none" stroke="#e9edf0" stroke-width="1.6"><circle cx="22" cy="22" r="2" stroke-width="1.2"/><path d="M22 4v9M22 31v9M4 22h9M31 22h9"/><path d="M8 13a17 17 0 0 1 5-5M31 8a17 17 0 0 1 5 5M36 31a17 17 0 0 1-5 5M13 36a17 17 0 0 1-5-5" stroke-opacity=".5"/></svg>
+  <svg id="hitmark" viewBox="0 0 30 30" stroke="#ffd28a" stroke-width="2.2"><path d="M4 4l7 7M26 4l-7 7M4 26l7-7M26 26l-7-7"/></svg>
+  <div id="dmgL" class="dmg"></div><div id="dmgR" class="dmg"></div><div id="dmgF" class="dmg"></div><div id="dmgB" class="dmg"></div>
+  <div id="stats">
+    <div id="unit">STRIKER · CAPTURED</div>
+    <div class="lbl">ARMOR <b id="armorN">100%</b></div><div id="armor" class="meter"><i></i></div>
+    <div class="lbl">CANNON HEAT <b id="heatN">0%</b></div><div id="heat" class="meter"><i></i></div>
+    <div class="lbl">ROCKETS <b id="rkN">6</b></div><div id="rk"></div>
+  </div>
+  <canvas id="radar" width="340" height="340"></canvas>
+  <div id="prompt" class="hidden"><b><kbd>E</kbd>HOLD TO HIJACK</b><div id="promptBar"><i></i></div></div>
+  <div id="hint"></div>
+  <div id="lockHint" class="hidden">CLICK TO AIM WITH THE MOUSE</div>
+</div>
+
+<div id="pause" class="overlay hidden"><div class="card"><h2>PAUSED</h2><p>Fallen City</p><div class="stack">
+  <button id="bResume" class="primary" type="button">RESUME</button>
+  <button id="bQual2" type="button">QUALITY: HIGH</button>
+  <button id="bMute" type="button">SOUND: ON</button>
+  <button id="bRestart" type="button">RESTART MISSION</button>
+  <button id="bCredP" type="button">CREDITS</button>
+</div></div></div>
+
+<div id="end" class="overlay hidden"><div class="card"><h2 id="endT"></h2><p id="endP"></p><div class="st" id="endS"></div><div class="row"><button id="bAgain" class="primary" type="button">PLAY AGAIN</button><button id="bCredE" type="button">CREDITS</button></div></div></div>
+
+<div id="cred" hidden><h2>CREDITS</h2><ul id="credList"></ul><p>Models under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, compressed and recolored for the game. Sky, textures and props from <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a> (CC0). Built with three.js. Sound is synthesised in the browser.</p><button id="bCredX" type="button">CLOSE</button></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module" src="js/game.js"></script>
+</body>
+</html>
