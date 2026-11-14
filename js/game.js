@@ -763,7 +763,11 @@ const DBGCAM = Q.get('cam') ? Q.get('cam').split(',').map(Number) : null; // tes
 function applyCamera(dt) {
   if (DBGCAM) { camera.position.set(DBGCAM[0], DBGCAM[1], DBGCAM[2]); camera.lookAt(DBGCAM[3], DBGCAM[4], DBGCAM[5]); if (DBGCAM[6] && camera.fov !== DBGCAM[6]) { camera.fov = DBGCAM[6]; camera.far = 2000; camera.updateProjectionMatrix(); } return; }
   const ph = mission.phase;
-  if (ph === 'title') { const t = W.t * 0.08, m = player.mech, c = m.pos; camera.position.set(c.x + Math.sin(t) * 19, 4.2 + Math.sin(t * 0.7) * 0.8, c.z + Math.cos(t) * 19 - 4); camera.lookAt(c.x, 4.5, c.z - 4); return; }
+  if (ph === 'title') { const t = W.t * 0.08, m = player.mech, c = m.pos, piv = V3(c.x, 4.5, c.z - 4);
+    // slow orbit around the mech; a building in the way pulls the camera in instead of filling the screen
+    let p = V3(c.x + Math.sin(t) * 19, 4.2 + Math.sin(t * 0.7) * 0.8, c.z + Math.cos(t) * 19 - 4); const hit = segBoxes(piv, p); if (hit !== null) p = piv.clone().lerp(p, Math.max(0.3, hit - 0.08));
+    player.titleK = player.titleK === undefined ? p.distanceTo(piv) : player.titleK + (Math.min(p.distanceTo(piv), player.titleK + dt * 2) - player.titleK) * (p.distanceTo(piv) < player.titleK ? 1 : 0.5);
+    camera.position.copy(piv).addScaledVector(p.sub(piv).normalize(), player.titleK); camera.lookAt(piv); return; }
   if (ph === 'intro') { const k = clamp(mission.t / mission.introLen, 0, 1), e = k * k * (3 - 2 * k), m = player.mech, c = m.pos;
     // crane shot: from low in front, up and over the mech's head (never through it or the street walls), down to the shoulder camera
     const r = camRig(m), a = V3(c.x - 3.5, 1.1, c.z - 9), p = a.clone().lerp(r.pos, e); p.y += Math.sin(e * Math.PI) * 13 * m.s;
