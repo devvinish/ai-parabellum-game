@@ -832,7 +832,10 @@ const mission = {
       showBanner('WAVE ' + this.wave + ' CLEARED', 'FIELD REPAIR +15% ARMOR', 3); later(7, () => !this.ended && this.svNext()); } return; }
     const last = this.wave >= LV.waves.length;
     if (!last) $('objSub').textContent = `${Math.min(this.done, this.need)} / ${this.need} neutralised`;
-    if (!last && this.done >= this.need) { this.need = 1e9; const i = this.wave; later(this.wave === 1 ? 2.5 : 3, () => this.startWave(i)); } },
+    if (!last && this.done >= this.need) { this.need = 1e9; const i = this.wave;
+      showBanner('WAVE ' + i + ' CLEARED', 'NEXT WAVE INCOMING', 2.6); setObjective('Wave ' + i + ' cleared', 'Next wave in 4');
+      for (const n of [3, 2, 1]) later(4 - n, () => { if (this.wave === i && !this.ended) $('objSub').textContent = 'Next wave in ' + n; });
+      later(4, () => this.startWave(i)); } },
   titanHud() { if (this.titansTotal > 1) setObjective('Bring down the Titans', `${this.titans.filter(t => t.resolved).length} / ${this.titansTotal} taken or destroyed`); },
   onDroid(d) { stats.kills++; this.addScore(d.fly ? 80 : 50); if (d.wave === this.wave) { this.done++; this.progress(); } },
   onDown(m) {
@@ -895,8 +898,25 @@ function onPlayerHit(n, from) {
 const markEls = new Map();
 const rk = $('rk'); for (let i = 0; i < 6; i++) rk.append(document.createElement('i'));
 let lastHud = '';
+const MARKS = []; let markWave = 0;
+const markName = o => o.titan ? 'TITAN' : o.kind === 'striker' ? 'STRIKER' : o.kind === 'drone' ? 'DRONE' : 'ANDROID';
+// the last one or two enemies of a wave get a red marker with their distance (clamped to the screen edge when out of view)
+function updateMarks() {
+  const box = $('marks'); if (!box) return; const pm = player.mech;
+  const left = mission.mode === 'campaign' && mission.phase === 'fight' && !mission.ended && mission.need < 1e8 ? mission.need - mission.done : 0;
+  const list = left > 0 && left <= 2 ? [...mechs, ...droids].filter(o => o.wave === mission.wave && o.state === 'active' && o.team !== 'player' && o.team !== 'neutral') : [];
+  if (list.length && markWave !== mission.wave) { markWave = mission.wave; showHint((left === 1 ? 'One enemy left: ' : 'Two enemies left: ') + list.map(o => markName(o).toLowerCase()).join(' and ') + '. Follow the red marker' + (list.length > 1 ? 's.' : '.'), 6); }
+  while (MARKS.length < list.length) { const e = document.createElement('div'); e.className = 'mk'; e.innerHTML = '<i></i><b></b>'; box.appendChild(e); MARKS.push(e); }
+  const w = innerWidth, h = innerHeight;
+  MARKS.forEach((e, i) => { const o = list[i]; if (!o) { e.style.display = 'none'; return; }
+    const v = o.center.clone(); v.y += (o.H || 2) * 0.55; v.project(camera); let x = (v.x + 1) / 2 * w, y = (1 - v.y) / 2 * h;
+    const behind = v.z > 1, off = behind || x < 40 || x > w - 40 || y < 80 || y > h - 190;
+    if (behind) { x = w - x; y = h - 190; } x = clamp(x, 40, w - 40); y = clamp(y, 80, h - 190); // stays above the armor panel and radar
+    e.style.display = ''; e.style.left = x + 'px'; e.style.top = y + 'px'; e.classList.toggle('edge', off);
+    e.lastChild.textContent = markName(o) + ' \u00b7 ' + Math.round(o.pos.distanceTo(pm.pos)) + ' m'; });
+}
 function updateHud(dt) {
-  const m = player.mech; if (!m) return;
+  const m = player.mech; if (!m) return; updateMarks();
   const a = m.armor / m.maxArmor, hud = [Math.round(a * 100), Math.round(player.heat), player.lock, player.rockets, player.reloadT > 0].join();
   if (hud !== lastHud) { lastHud = hud;
     $('armor').firstChild.style.width = (a * 100) + '%'; $('armorN').textContent = Math.round(a * 100) + '%'; $('armor').classList.toggle('low', a < 0.25);

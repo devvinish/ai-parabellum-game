@@ -74,6 +74,7 @@ button.primary:hover{background:#ffbe63;color:#120d05}
 #xhair{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px}
 #xhair.on path,#xhair.on circle{stroke:var(--red)}
 #hitmark{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;opacity:0;transition:opacity .15s}
+#marks{position:absolute;inset:0;pointer-events:none}.mk{position:absolute;transform:translate(-50%,-50%);color:#ff5a45;font-size:11px;font-weight:600;letter-spacing:.08em;text-align:center;white-space:nowrap;text-shadow:0 1px 3px #000}.mk i{display:block;width:13px;height:13px;margin:0 auto 6px;border:2px solid #ff5a45;transform:rotate(45deg);box-shadow:0 0 8px rgba(255,90,69,.6)}.mk.edge i{background:#ff5a45}
 #prompt{position:absolute;left:50%;top:62%;transform:translateX(-50%);text-align:center;background:var(--panel);border:1px solid var(--amber);padding:9px 18px 10px;min-width:260px}
 #prompt b{font-size:15px;letter-spacing:.14em;color:var(--amber)}
 #prompt kbd{font:700 13px var(--font);border:1px solid var(--amber);border-radius:3px;padding:1px 7px;margin-right:6px;color:var(--ink)}
@@ -134,6 +135,7 @@ button.primary:hover{background:#ffbe63;color:#120d05}
   <div id="obj"><small>OBJECTIVE</small><div id="objText"></div><div id="objSub"></div></div>
   <div id="banner"><b></b><span></span></div>
   <div id="markers"></div>
+  <div id="marks"></div>
   <svg id="xhair" viewBox="0 0 44 44" fill="none" stroke="#e9edf0" stroke-width="1.6"><circle cx="22" cy="22" r="2" stroke-width="1.2"/><path d="M22 4v9M22 31v9M4 22h9M31 22h9"/><path d="M8 13a17 17 0 0 1 5-5M31 8a17 17 0 0 1 5 5M36 31a17 17 0 0 1-5 5M13 36a17 17 0 0 1-5-5" stroke-opacity=".5"/></svg>
   <svg id="hitmark" viewBox="0 0 30 30" stroke="#ffd28a" stroke-width="2.2"><path d="M4 4l7 7M26 4l-7 7M4 26l7-7M26 26l-7-7"/></svg>
   <div id="dmgL" class="dmg"></div><div id="dmgR" class="dmg"></div><div id="dmgF" class="dmg"></div><div id="dmgB" class="dmg"></div>
