@@ -14,6 +14,7 @@ Changes we made: textures resized to 1024 px and converted to WebP, geometry com
 | Walker mech | [Medium Mech Striker](https://sketchfab.com/3d-models/medium-mech-striker-27ba717c173a40b7841d2f2c6a89d823) | MSGDI | `assets/models/mech_striker.glb` |
 | Cockpit mech | [Heavy Mech Forest Variant - Rigged and Animated](https://sketchfab.com/3d-models/heavy-mech-forest-variant-rigged-and-animated-f1cae631be404ed1ae3e84073a96ecbb) | HighPolyDensity | `assets/models/mech_heavy.glb` |
 | AI trooper | [Security Cyborg](https://sketchfab.com/3d-models/security-cyborg-94ea8c717c374e3fa8aaa7549235b323) | fletcherkinnear | `assets/models/cyborg.glb` |
+| Human soldier | [S.W.A.T. Operator](https://sketchfab.com/3d-models/swat-operator-9e82fabf26194896b5ad4a364d864eab) | SpatialNeglect | `assets/models/soldier.glb` |
 | AI android | [Biped robot](https://sketchfab.com/3d-models/biped-robot-801d2a245e4a4405a0c2152b35b5e486) | Willy Decarpentrie | `assets/models/biped.glb` |
 
 License: [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/)

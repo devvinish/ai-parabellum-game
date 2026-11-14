@@ -40,5 +40,11 @@
   "name": "Biped robot",
   "url": "https://sketchfab.com/3d-models/biped-robot-801d2a245e4a4405a0c2152b35b5e486",
   "author": "Willy Decarpentrie"
+ },
+ {
+  "use": "Human soldier",
+  "name": "S.W.A.T. Operator",
+  "url": "https://sketchfab.com/3d-models/swat-operator-9e82fabf26194896b5ad4a364d864eab",
+  "author": "SpatialNeglect"
  }
 ]
