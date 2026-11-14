@@ -512,7 +512,7 @@ function applyCamera(dt) {
   if (ph === 'intro') { const k = clamp(mission.t / mission.introLen, 0, 1), e = k * k * (3 - 2 * k), m = player.mech, c = m.pos;
     const a = V3(c.x - 3.5, 1.1, c.z - 9), b = camRig(m).pos; camera.position.copy(a.lerp(b, e)); const look = V3(c.x, 5.5, c.z).lerp(camRig(m).pos.addScaledVector(camRig(m).dir, 40), e); camera.lookAt(look); return; }
   if (ph === 'transfer') { const T = mission.transfer, k = clamp(T.t / 2.4, 0, 1), e = k * k * (3 - 2 * k), to = camRig(player.mech);
-    const mid = T.from.pos.clone().lerp(to.pos, e).add(V3(0, Math.sin(k * Math.PI) * 6, 0)); camera.position.copy(mid); camera.lookAt(player.mech.center.lerp(to.pos.clone().addScaledVector(to.dir, 40), e * e)); return; }
+    const mid = T.from.pos.clone().lerp(to.pos, e).add(V3(0, Math.sin(k * Math.PI) * 2.5, 0)); camera.position.copy(mid); camera.lookAt(player.mech.center.lerp(to.pos.clone().addScaledVector(to.dir, 40), e * e)); return; }
   const r = camRig(player.mech); camera.position.copy(r.pos); camera.lookAt(r.pos.clone().add(r.dir));
   if (fx.shake > 0) { const s = fx.shake * 0.35; camera.position.add(V3(rand(-s, s), rand(-s, s), rand(-s, s))); }
 }
@@ -707,7 +707,7 @@ function frame() {
   if (player.mech && mission.phase !== 'title') updateAim();
   // moonlight shadows and the headlight follow the action
   const pm = player.mech; if (pm) { moon.target.position.set(pm.pos.x, 0, pm.pos.z - 18); moon.position.set(pm.pos.x - 35, 70, pm.pos.z + 7);
-    const hp = pm.eye.add(fwdOf(pm.aimYaw).multiplyScalar(1.4 * pm.s)); headlight.position.copy(hp); headlight.target.position.copy(player.aim && mission.phase === 'fight' ? player.aim : hp.clone().add(fwdOf(pm.heading).multiplyScalar(30)).setY(0)); headlight.intensity = pm.state === 'active' || pm.state === 'boot' ? 260 : 0; }
+    const hp = pm.eye.add(fwdOf(pm.aimYaw).multiplyScalar(1.4 * pm.s)); headlight.position.copy(hp); headlight.target.position.copy(player.aim && mission.phase === 'fight' ? player.aim : hp.clone().add(fwdOf(pm.heading).multiplyScalar(30)).setY(0)); headlight.intensity = pm.state === 'active' && mission.phase !== 'transfer' ? 260 : 0; }
   rain(dt, camera);
   if (mission.phase !== 'title') updateHud(dt);
   grade.uniforms.uTime.value = W.t;
