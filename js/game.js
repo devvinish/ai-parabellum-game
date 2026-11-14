@@ -42,6 +42,8 @@ function segBoxes(a, b, list = BOXES) {
   return best;
 }
 const losClear = (a, b) => segBoxes(a, b) === null;
+// the Core's own hitbox is a box too: a sight line that first meets it is a clear view of it
+const coreSeen = a => { const c = coreEnt.center, t = segBoxes(a, c); if (t === null) return true; const p = a.clone().lerp(c, t); return Math.abs(p.x - coreEnt.pos.x) <= coreEnt.hx && Math.abs(p.z - coreEnt.pos.z) <= coreEnt.hz; };
 // closest distance between segment p1q1 and segment p2q2; returns [distance, fraction along the first]
 function segSeg(p1, q1, p2, q2) {
   const d1x = q1.x - p1.x, d1y = q1.y - p1.y, d1z = q1.z - p1.z, d2x = q2.x - p2.x, d2y = q2.y - p2.y, d2z = q2.z - p2.z;
@@ -380,7 +382,7 @@ class Mech {
     // footfalls
     const g = this.gait; if (g === 'walk' || g === 'run' || g === 'back') {
       const a = this.act[g], ph = (a.time / a.getClip().duration) % 1, half = ph >= 0.5 ? 1 : 0;
-      if (half !== this.stepPhase) { this.stepPhase = half; const d = camera.position.distanceTo(this.pos); sound.stomp(d, this.titan ? 1.4 : 1); if (this === player.mech) fx.shake = Math.max(fx.shake, 0.12); else if (d < 30) fx.shake = Math.max(fx.shake, (this.titan ? 0.5 : 0.25) * (1 - d / 30)); }
+      if (half !== this.stepPhase) { this.stepPhase = half; const d = camera.position.distanceTo(this.pos); sound.stomp(d, this.titan ? 1.4 : 1); if (this === player.mech) fx.shake = Math.max(fx.shake, 0.05); else if (d < 30) fx.shake = Math.max(fx.shake, (this.titan ? 0.5 : 0.25) * (1 - d / 30)); }
     }
     if (this.paintTo) { const p = this.paintTo; p.f = Math.min(1, p.f + dt / 1.6); this.u.uKeep.value = lerp(this.u.uKeep.value, p.k, p.f); this.u.uDark.value = lerp(this.u.uDark.value, p.d, p.f); this.u.uTint.value.lerp(p.t, p.f); if (p.f >= 1) this.paintTo = null; }
     if (this.state === 'down') { // an overheated core glows and smokes
@@ -476,7 +478,7 @@ function makeCore() {
   const m = C.core; m.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(m), c = b.getCenter(V3()), s = b.getSize(V3());
   // a fair hitbox: the visible machine, trimmed a little
   const hb = new THREE.Box3(V3(c.x - s.x * 0.42, b.min.y, c.z - s.z * 0.42), V3(c.x + s.x * 0.42, b.max.y * 0.92, c.z + s.z * 0.42));
-  coreEnt = {state: 'active', shielded: true, hp: LV.core.hp, maxHp: LV.core.hp, pos: V3(c.x, GROUND, c.z), get center() { return V3(c.x, b.max.y * 0.45, c.z); }, spawnT: 6, warned: false,
+  coreEnt = {state: 'active', shielded: true, hp: LV.core.hp, maxHp: LV.core.hp, pos: V3(c.x, GROUND, c.z), get center() { return V3(c.x, b.max.y * 0.45, c.z); }, spawnT: 6, warned: false, hx: s.x * 0.42 + 0.5, hz: s.z * 0.42 + 0.5,
     damage(n) {
       if (this.state !== 'active') return;
       if (this.shielded) { if (!this.warned) { this.warned = true; showHint('The Core is shielded while its Titans stand. Bring them down first.', 5); } return; }
@@ -610,27 +612,51 @@ const player = {mech: null, camYaw: Math.PI, camPitch: 0.06, heat: 0, lock: fals
 const stats = {shots: 0, hits: 0, kills: 0, hijacks: 0, start: 0, time: 0, armorLost: 0};
 const keys = {}; let mouseFire = false, mouseRocket = false, locked = false;
 const tap = {fire: false, rocket: false, reload: false}; // presses shorter than a frame still count
-const bot_ = {stuck: 0, side: 0, last: V3()};
+const bot_ = {stuck: 0, side: 0, last: V3(), route: null, routeT: 0, routeTo: null, tgt: null, ban: null, banT: 0, aimO: null, aimT: 0, aimHp: 0};
+const hpOf = o => o.armor ?? o.hp ?? 0;
 function bot(dt) { // test autopilot: face the nearest enemy, close in, fire, hijack when possible
   const m = player.mech; let best = null, bd = 1e9;
   const cands = [...mechs, ...droids]; if (coreEnt && mission.coreOpen && coreEnt.state === 'active') cands.push(coreEnt);
   // prefer the nearest target in line of sight; otherwise walk toward the nearest one
   let near = null, nd = 1e9;
   for (const o of cands) { if (o === m || o.state !== 'active' || o.team === 'player' || o.team === 'neutral') continue; const d = o.pos.distanceTo(m.pos);
-    if (d < nd) { nd = d; near = o; } if (d < bd && losClear(camera.position, o.center) && losClear(m.eye, o.center)) { bd = d; best = o; } }
-  const blind = !best && near; if (blind) { best = near; bd = nd; }
-  for (const k of ['KeyW', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE']) keys[k] = false;
+    if (d < nd) { nd = d; near = o; } if (o === bot_.ban && bot_.banT > 0) continue; if (d < bd && losClear(camera.position, o.center) && losClear(m.eye, o.center)) { bd = d; best = o; } }
+  const keep = bot_.tgt; if (best && keep && keep !== best && keep.state === 'active' && keep.team !== 'player' && keep.team !== 'neutral' && losClear(camera.position, keep.center) && losClear(m.eye, keep.center)) { const kd = keep.pos.distanceTo(m.pos); if (kd < bd * 1.6) { best = keep; bd = kd; } }
+  // like a player told to burn the Core: once it is open and in sight, it is the target
+  if (coreEnt && mission.coreOpen && coreEnt.state === 'active' && coreSeen(camera.position) && coreSeen(m.eye)) { best = coreEnt; bd = coreEnt.pos.distanceTo(m.pos); }
+  const blind = !best && near; if (blind) { best = near; bd = nd; } bot_.tgt = blind ? null : best;
+  for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'ShiftLeft']) keys[k] = false; bot_.banT -= dt;
   // unstick: if the walk is blocked, sidestep for a moment
-  if (bot_.side > 0) { bot_.side -= dt; keys.KeyD = true; keys.KeyW = true; return; }
+  if (bot_.side > 0) { bot_.side -= dt; keys[bot_.dir > 0 ? 'KeyD' : 'KeyA'] = true; keys.KeyW = true; return; }
   const cand = hijackCandidate(); if (cand && cand.team === 'enemy' && (m.armor / m.maxArmor < 0.7 || cand.titan || !stats.hijacks)) { const d = cand.pos.clone().sub(m.pos); player.camYaw = Math.atan2(d.x, d.z); keys.KeyE = true; keys.KeyW = d.length() > cand.r + m.r + 3; return; }
-  const down = mechs.find(o => o.state === 'down' && o.team === 'enemy' && (o.titan || !stats.hijacks)); if (down) { const d = down.pos.clone().sub(m.pos); player.camYaw = Math.atan2(d.x, d.z); keys.KeyW = true; botMove(dt); return; }
+  const down = mechs.find(o => o.state === 'down' && o.team === 'enemy' && (o.titan || !stats.hijacks)); if (down) { const d = down.pos.clone().sub(m.pos); bot_.routeT -= dt; if (bot_.routeT <= 0 || bot_.routeTo !== down) { bot_.route = botRoute(m, down.pos); bot_.routeT = 0.8; bot_.routeTo = down; }
+    player.camYaw = turnTo(player.camYaw, d.length() < 14 || bot_.route === null ? Math.atan2(d.x, d.z) : bot_.route, 0.12); keys.KeyW = true; botMove(dt); return; }
   if (!best) { const d = V3(LV.rally[0] - m.pos.x, 0, LV.rally[1] - m.pos.z); keys.KeyW = mission.mode !== 'survival' && d.length() > 12; if (keys.KeyW) player.camYaw = turnTo(player.camYaw, Math.atan2(d.x, d.z), 0.08); botMove(dt); return; }
-  if (blind) { const d = best.pos.clone().sub(m.pos); player.camYaw = turnTo(player.camYaw, steer(m, Math.atan2(d.x, d.z)), 0.08); keys.KeyW = true; botMove(dt); return; }
-  const d = best.center.sub(camera.position); player.camYaw = turnTo(player.camYaw, Math.atan2(d.x, d.z), 0.08); player.camPitch = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)) + 0.02, -0.42, 0.5);
+  if (blind) { const d = best.pos.clone().sub(m.pos); bot_.routeT -= dt; if (bot_.routeT <= 0 || bot_.routeTo !== best) { bot_.route = botRoute(m, best.pos); bot_.routeT = 0.8; bot_.routeTo = best; }
+    player.camYaw = turnTo(player.camYaw, bot_.route ?? steer(m, Math.atan2(d.x, d.z)), 0.08); keys.KeyW = true; keys.ShiftLeft = d.length() > 25; botMove(dt); return; }
+  // shots not landing (target on a ledge, behind a lip): stop wasting fire and walk to a new angle for a while
+  if (best === bot_.aimO) { bot_.aimT += dt; if (hpOf(best) < bot_.aimHp - 0.5) { bot_.aimT = 0; bot_.aimHp = hpOf(best); } if (bot_.aimT > 4) { bot_.ban = best; bot_.banT = 6; bot_.aimO = null; } }
+  else { bot_.aimO = best; bot_.aimT = 0; bot_.aimHp = hpOf(best); }
+  const d = best.center.sub(camera.position); player.camYaw = turnTo(player.camYaw, Math.atan2(d.x, d.z), 0.08); player.camPitch += (clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)) + 0.02, -0.42, 0.5) - player.camPitch) * 0.15;
   keys.KeyW = bd > (best === coreEnt ? 45 : 30); keys.KeyS = bd < 11 && best !== coreEnt; keys.Space = bd < 110 && !player.lock; keys.KeyQ = (best instanceof Mech || best === coreEnt) && bd < 80 && Math.random() < 0.3;
   botMove(dt);
 }
-function botMove(dt) { const m = player.mech; if (keys.KeyW) { const moved = Math.hypot(m.pos.x - bot_.last.x, m.pos.z - bot_.last.z); bot_.stuck = moved < 0.6 * dt ? bot_.stuck + dt : 0; if (bot_.stuck > 1.2) { bot_.stuck = 0; bot_.side = 1.4; } } bot_.last.copy(m.pos); }
+// test autopilot route: breadth-first search over a 2.5 m grid, returns the heading to the next waypoint (null if no route)
+function botRoute(m, goal) {
+  const S = 2.5, x0 = BOUNDS.x0, z0 = BOUNDS.z0, W = Math.ceil((BOUNDS.x1 - x0) / S), H = Math.ceil((BOUNDS.z1 - z0) / S);
+  const cell = (x, z) => clamp(Math.floor((z - z0) / S), 0, H - 1) * W + clamp(Math.floor((x - x0) / S), 0, W - 1);
+  const cx = i => x0 + (i % W + 0.5) * S, cz = i => z0 + (Math.floor(i / W) + 0.5) * S;
+  const a = cell(m.pos.x, m.pos.z), b = cell(goal.x, goal.z), prev = new Int32Array(W * H).fill(-1), seen = new Uint8Array(W * H);
+  const q = [a]; seen[a] = 1; let found = false;
+  for (let h = 0; h < q.length && !found; h++) { const i = q[h], x = i % W, z = Math.floor(i / W);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) { const nx = x + dx, nz = z + dz; if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
+      const j = nz * W + nx; if (seen[j]) continue; seen[j] = 1;
+      if (j !== b && !freeAt(cx(j), cz(j), m.r * 1.1, m)) continue; prev[j] = i; if (j === b) { found = true; break; } q.push(j); } }
+  if (!found) return null;
+  let j = b, wp = b; while (prev[j] !== -1 && prev[j] !== a) { j = prev[j]; if (Math.hypot(cx(j) - m.pos.x, cz(j) - m.pos.z) > 7) wp = j; } if (wp === b) wp = j;
+  return Math.atan2(cx(wp) - m.pos.x, cz(wp) - m.pos.z);
+}
+function botMove(dt) { const m = player.mech; if (keys.KeyW) { const moved = Math.hypot(m.pos.x - bot_.last.x, m.pos.z - bot_.last.z); bot_.stuck = moved < 0.6 * dt ? bot_.stuck + dt : 0; if (bot_.stuck > 1.2) { bot_.stuck = 0; bot_.side = 1.4; bot_.dir = Math.random() < 0.5 ? 1 : -1; bot_.routeT = 0; } } bot_.last.copy(m.pos); }
 function playerControl(dt) {
   const m = player.mech; if (!m || m.state !== 'active') return;
   if (Q.has('bot')) bot(dt);
@@ -697,7 +723,7 @@ function hijackCandidate() {
 }
 function hijack(target) {
   const old = player.mech; stats.hijacks++;
-  mission.transfer = {t: 0, from: camRig(old), old, target}; mission.phase = 'transfer';
+  mission.transfer = {t: 0, from: {pos: camera.position.clone(), dir: camRig(old).dir}, old, target}; mission.phase = 'transfer';
   sound.hijack(); grade.uniforms.uGlitch.value = 1;
   // the abandoned mech powers down where it stands
   old.state = 'down'; old.team = 'neutral'; old.armor = Math.max(old.armor, 1); old.downT = 0; old.u.uHeat.value = 0;
@@ -714,12 +740,14 @@ function hijack(target) {
 }
 
 /* ---------- camera ---------- */
-function camRig(m) {
+function camRig(m, dt) { // dt: the live camera, which eases back out after a wall pushes it in
   const s = m.s, pivot = m.pos.clone().add(V3(0, (m.titan ? 8.6 : 6.4), 0)), yaw = player.camYaw, pitch = player.camPitch;
   const dir = V3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
   const dist = m.titan ? 18 : 13.5;
   let pos = pivot.clone().addScaledVector(dir, -dist).addScaledVector(rightOf(yaw), (m.titan ? 5.2 : 4.0)).add(V3(0, 1.0 * s, 0));
-  const t = segBoxes(pivot, pos, CAMBOXES.length ? BOXES.concat(CAMBOXES) : BOXES); if (t !== null) pos = pivot.clone().lerp(pos, Math.max(0.15, t - 0.06));
+  const t = segBoxes(pivot, pos, CAMBOXES.length ? BOXES.concat(CAMBOXES) : BOXES); let k = t !== null ? Math.max(0.15, t - 0.06) : 1;
+  if (dt !== undefined) { player.camK = k < (player.camK ?? 1) ? k : Math.min(k, (player.camK ?? 1) + dt * 1.2); k = player.camK; }
+  if (k < 1) pos = pivot.clone().lerp(pos, k);
   pos.y = Math.max(pos.y, 1.2);
   return {pos, dir};
 }
@@ -743,9 +771,12 @@ function applyCamera(dt) {
   if (ph === 'transfer') { const T = mission.transfer, k = clamp(T.t / 2.4, 0, 1), e = k * k * (3 - 2 * k), to = camRig(player.mech);
     let mid = T.from.pos.clone().lerp(to.pos, e).add(V3(0, Math.sin(k * Math.PI) * 2.5, 0));
     const piv = player.mech.pos.clone().add(V3(0, player.mech.titan ? 8.6 : 6.4, 0)), hitT = segBoxes(piv, mid); if (hitT !== null) mid = piv.lerp(mid, Math.max(0.15, hitT - 0.06)); // keep the swing out of walls
-    camera.position.copy(mid); camera.lookAt(player.mech.center.lerp(to.pos.clone().addScaledVector(to.dir, 40), e * e)); return; }
-  const r = camRig(player.mech); camera.position.copy(r.pos); camera.lookAt(r.pos.clone().add(r.dir));
-  if (fx.shake > 0) { const s = fx.shake * 0.35; camera.position.add(V3(rand(-s, s), rand(-s, s), rand(-s, s))); }
+    // the view turns from where we were looking, to the new machine, then out along its aim: no snap on the first frame
+    const a = clamp(k / 0.35, 0, 1), look = T.from.pos.clone().addScaledVector(T.from.dir, 40).lerp(player.mech.center, a * a * (3 - 2 * a)).lerp(to.pos.clone().addScaledVector(to.dir, 40), e * e);
+    camera.position.copy(mid); camera.lookAt(look); return; }
+  const r = camRig(player.mech, dt); camera.position.copy(r.pos); camera.lookAt(r.pos.clone().add(r.dir));
+  // smooth rumble rather than a new random jump every frame
+  if (fx.shake > 0) { const s = Math.min(fx.shake, 1.2) * 0.22, t = W.t; camera.position.add(V3(Math.sin(t * 31) + 0.5 * Math.sin(t * 53 + 1.7), Math.sin(t * 37 + 0.9) + 0.5 * Math.sin(t * 61 + 2.3), Math.sin(t * 29 + 2.1)).multiplyScalar(s * 0.67)); }
 }
 
 /* ---------- mission ---------- */
@@ -1035,7 +1066,7 @@ loadAll().then(() => {
   const REC = Q.has('rec'); // video capture: the page advances one fixed 1/30 s frame per call instead of running in real time
   if (REC) { startRecording(() => W.t); for (const id of ['hint', 'lockHint']) $(id).style.visibility = 'hidden'; } else renderer.setAnimationLoop(frame);
   window.__lt = {ready: true, scene, camera, THREE, renderer};
-  window.__g = {mission, player, mechs, droids, stats, keys, deploy, step, fx, BOXES, LV, endGame, save, get core() { return coreEnt; }};
+  window.__g = {mission, player, mechs, droids, stats, keys, deploy, step, fx, BOXES, LV, endGame, save, bot_, get core() { return coreEnt; }};
   if (REC) window.__g.rec = {get t() { return W.t; }, frame: () => render(1 / 30), audio: (t0, dur, o) => renderRecording(t0, dur, {rain: LV.weather === 'rain', ...o}),
     // fast-forward without drawing, until cond() holds or max seconds pass
     ff(max, cond) { for (let s = 0; s < max; s += 1 / 30) { if (cond && cond()) return true; step(1 / 30); applyCamera(1 / 30); camera.updateMatrixWorld(); updateAim(); updateHud(1 / 30); } return !cond; }};
