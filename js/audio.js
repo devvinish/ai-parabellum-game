@@ -1,7 +1,7 @@
 // AI Parabellum audio: every sound is synthesised with Web Audio, so nothing extra is downloaded.
 let ctx = null, master = null, sfx = null, music = null, noiseBuf = null, muted = false;
 
-export function initAudio() {
+export function initAudio({rain = true} = {}) {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
   ctx = new AC();
@@ -12,7 +12,7 @@ export function initAudio() {
   music = ctx.createGain(); music.gain.value = 0.28; music.connect(master);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  startRain(); startScore();
+  if (rain) startRain(); startScore();
 }
 export function setMuted(v) { muted = v; if (master) master.gain.setTargetAtTime(v ? 0 : 0.8, ctx.currentTime, 0.05); }
 export const isMuted = () => muted;

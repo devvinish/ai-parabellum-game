@@ -218,3 +218,20 @@ export class Fire {
       const sc = (1 + k * 5) * f.size; s.scale.set(sc, sc, 1); s.material.opacity = Math.sin(k * Math.PI) * 0.55; }
   }
 }
+// snow, blowing sand or rising embers: soft points that follow the camera
+export function makeParticles(scene, high, {count = 5000, color = 0xffffff, size = 0.14, fall = 1.4, drift = [0.5, 0.2], R = 42, H = 28, opacity = 0.85, add = false} = {}) {
+  const N = Math.round(high ? count : count * 0.4), pos = new Float32Array(N * 3), seed = new Float32Array(N);
+  for (let i = 0; i < N; i++) { pos.set([(Math.random() - 0.5) * R * 2, Math.random() * H, (Math.random() - 0.5) * R * 2], i * 3); seed[i] = Math.random() * 100; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({color, size, map: glowTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0.35)'), transparent: true, opacity, depthWrite: false, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending});
+  const pts = new THREE.Points(g, mat); pts.frustumCulled = false; scene.add(pts);
+  let t = 0;
+  return (dt, cam) => {
+    t += dt; const p = g.attributes.position.array, cx = cam.position.x, cz = cam.position.z, base = Math.max(0, cam.position.y - 12);
+    for (let i = 0; i < N; i++) { const o = i * 3, s = seed[i], w = 0.6 + (s % 1) * 0.8;
+      p[o] += (drift[0] + Math.sin(t * 0.9 + s) * 0.5) * w * dt; p[o + 1] -= fall * w * dt; p[o + 2] += (drift[1] + Math.cos(t * 0.7 + s) * 0.5) * w * dt;
+      const out = fall > 0 ? p[o + 1] < -0.2 : p[o + 1] > base + H;
+      if (out || Math.abs(p[o] - cx) > R || Math.abs(p[o + 2] - cz) > R) { p[o] = cx + (Math.random() - 0.5) * R * 2; p[o + 2] = cz + (Math.random() - 0.5) * R * 2; p[o + 1] = fall > 0 ? base + Math.random() * H : Math.random() * 3; } }
+    g.attributes.position.needsUpdate = true;
+  };
+}
