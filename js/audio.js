@@ -1,10 +1,18 @@
 // AI Parabellum audio: every sound is synthesised with Web Audio, so nothing extra is downloaded.
 let ctx = null, master = null, sfx = null, music = null, noiseBuf = null, muted = false;
 
+// recording: sound calls are logged with game time, then rendered offline in sync with captured frames
+let rec = null, clockFn = null, offT = null, scoreEnd = 0;
+const now = () => offT ?? ctx.currentTime;
+export function startRecording(clock) { clockFn = clock; rec = []; }
 export function initAudio({rain = true} = {}) {
+  if (rec) return;
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-  ctx = new AC();
+  build(new AC(), rain);
+}
+function build(c, rain) {
+  ctx = c;
   master = ctx.createGain(); master.gain.value = muted ? 0 : 0.8;
   const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 5;
   master.connect(comp).connect(ctx.destination);
@@ -18,14 +26,14 @@ export function setMuted(v) { muted = v; if (master) master.gain.setTargetAtTime
 export const isMuted = () => muted;
 
 function noise(dur, {type = 'lowpass', f = 1000, f2 = null, q = 0.7, gain = 1, attack = 0.002, out = sfx, when = 0} = {}) {
-  if (!ctx) return; const t = ctx.currentTime + when;
+  if (!ctx) return; const t = now() + when;
   const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
   const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + dur); fl.Q.value = q;
   const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   src.connect(fl).connect(g).connect(out); src.start(t, Math.random()); src.stop(t + dur + 0.05);
 }
 function tone(dur, {f = 80, f2 = 40, type = 'sine', gain = 1, attack = 0.003, out = sfx, when = 0} = {}) {
-  if (!ctx) return; const t = ctx.currentTime + when;
+  if (!ctx) return; const t = now() + when;
   const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t + dur);
   const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g).connect(out); o.start(t); o.stop(t + dur + 0.05);
@@ -61,7 +69,25 @@ function startScore() {
   const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05; const lg = ctx.createGain(); lg.gain.value = 180; lfo.connect(lg).connect(lp.frequency); lfo.start();
   for (const [f, det] of [[36.7, -8], [36.7, 9], [55, 4], [43.65, -3]]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det; const g = ctx.createGain(); g.gain.value = 0.22; o.connect(g).connect(lp); o.start(); }
   let next = ctx.currentTime + 1;
+  if (scoreEnd) { while (next < scoreEnd) { tone(0.5, {f: 48, f2: 40, gain: 0.5, out: music, when: next - ctx.currentTime}); next += 1.6; } return; }
   const pulse = () => { if (!ctx) return; while (next < ctx.currentTime + 2) { tone(0.5, {f: 48, f2: 40, gain: 0.5, out: music, when: next - ctx.currentTime}); next += 1.6; } setTimeout(pulse, 800); };
   pulse();
 }
-export function scoreIntensity(k) { if (music) music.gain.setTargetAtTime(0.22 + k * 0.25, ctx.currentTime, 1.5); }
+export function scoreIntensity(k) { if (rec) { rec.push([clockFn(), 'score', [k]]); return; } if (music) music.gain.setTargetAtTime(0.22 + k * 0.25, now(), 1.5); }
+// log every sound call while recording
+for (const name of Object.keys(sound)) { const fn = sound[name]; sound[name] = (...args) => { if (rec) { rec.push([clockFn(), name, args]); return; } fn(...args); }; }
+// render the log from game time t0 for dur seconds; returns a 16-bit stereo WAV as base64
+export async function renderRecording(t0, dur, {rain = true, intensity = 0.6} = {}) {
+  const log = rec, sr = 48000, off = new OfflineAudioContext(2, Math.ceil(sr * dur), sr); rec = null; scoreEnd = dur; build(off, rain);
+  music.gain.value = 0.22 + intensity * 0.25;
+  for (const [t, name, args] of log) { if (t < t0 - 0.05 || t > t0 + dur) continue; offT = Math.max(0, t - t0);
+    if (name === 'score') music.gain.setTargetAtTime(0.22 + args[0] * 0.25, offT, 1.5); else sound[name](...args); }
+  offT = null; const buf = await off.startRendering(); ctx = null;
+  const n = buf.length, L = buf.getChannelData(0), R = buf.getChannelData(1), out = new DataView(new ArrayBuffer(44 + n * 4));
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) out.setUint8(o + i, str.charCodeAt(i)); };
+  w(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); w(8, 'WAVE'); w(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
+  out.setUint32(24, sr, true); out.setUint32(28, sr * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, n * 4, true);
+  for (let i = 0; i < n; i++) { out.setInt16(44 + i * 4, Math.max(-1, Math.min(1, L[i])) * 32767, true); out.setInt16(46 + i * 4, Math.max(-1, Math.min(1, R[i])) * 32767, true); }
+  let bin = ''; const u8 = new Uint8Array(out.buffer); for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+}

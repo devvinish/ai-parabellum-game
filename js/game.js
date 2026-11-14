@@ -2,7 +2,7 @@
 import {THREE, Q, BASE, settings, createView, manager, loadGLB, loadTex, loadHDR, prep, fit, warPaint, TEX, sprite, glowTexture, FX, makeRain, makeParticles, Fire} from './core.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {initAudio, sound, setMuted, isMuted, scoreIntensity} from './audio.js';
+import {initAudio, sound, setMuted, isMuted, scoreIntensity, startRecording, renderRecording} from './audio.js';
 import {LEVELS, levelById} from './levels.js';
 
 const $ = id => document.getElementById(id);
@@ -25,12 +25,13 @@ const GOD = Q.has('god');
 const BOUNDS = LV.bounds;
 const BOXES = (LV.boxes || []).map(b => ({...b})); // solid blocks: x0, x1, z0, z1, height (ent = a target that owns the box)
 const CIRCLES = []; // static obstacles for mechs: {x, z, r}
+const CAMBOXES = []; // extra boxes only the camera stays out of (big models with trimmed hitboxes)
 
 function inBox(x, z, pad = 0) { for (const b of BOXES) if (x > b.x0 - pad && x < b.x1 + pad && z > b.z0 - pad && z < b.z1 + pad) return b; return null; }
 // segment a->b against the solid boxes; returns the hit fraction or null (segBoxes.box = the box hit)
-function segBoxes(a, b) {
+function segBoxes(a, b, list = BOXES) {
   let best = null; segBoxes.box = null;
-  for (const bx of BOXES) {
+  for (const bx of list) {
     let t0 = 0, t1 = 1; const d = [b.x - a.x, b.y - a.y, b.z - a.z], o = [a.x, a.y, a.z], mn = [bx.x0, -5, bx.z0], mx = [bx.x1, bx.h, bx.z1]; let ok = true;
     for (let i = 0; i < 3 && ok; i++) {
       if (Math.abs(d[i]) < 1e-9) { if (o[i] < mn[i] || o[i] > mx[i]) ok = false; }
@@ -63,7 +64,7 @@ const usesDrones = LV.waves.some(w => w.drones) || !!LV.core;
 async function loadAll() {
   msg.textContent = 'LIGHTING THE SKY';
   const hdr = await loadHDR(LV.sky.hdr); hdr.mapping = THREE.EquirectangularReflectionMapping;
-  scene.background = hdr; scene.environment = hdr; scene.backgroundIntensity = LV.sky.bg; scene.environmentIntensity = LV.sky.env;
+  scene.background = LV.sky.color != null ? new THREE.Color(LV.sky.color) : hdr; scene.environment = hdr; scene.backgroundIntensity = LV.sky.bg; scene.environmentIntensity = LV.sky.env;
   msg.textContent = 'BUILDING ' + LV.name.toUpperCase();
   const names = [...new Set(['mech_striker', 'cyborg', 'biped', ...(usesDrones ? ['drone'] : []), ...LV.assets])];
   const g = await Promise.all(names.map(loadGLB)); names.forEach((n, i) => A[n] = g[i]);
@@ -89,15 +90,16 @@ function texMat(name, {repeat = null, color = 0xffffff, rough = 0.8, metal = 0, 
 function windowsMat() {
   if (matCache.has('win')) return matCache.get('win');
   const S = 512, B = 8, cv = document.createElement('canvas'), ev = document.createElement('canvas'); cv.width = cv.height = ev.width = ev.height = S;
-  const g = cv.getContext('2d'), e = ev.getContext('2d'); g.fillStyle = '#3b3936'; g.fillRect(0, 0, S, S); e.fillStyle = '#000'; e.fillRect(0, 0, S, S);
+  const g = cv.getContext('2d'), e = ev.getContext('2d'); g.fillStyle = '#4a4743'; g.fillRect(0, 0, S, S); e.fillStyle = '#000'; e.fillRect(0, 0, S, S);
   for (let i = 0; i < 2600; i++) { const v = 40 + Math.random() * 30; g.fillStyle = `rgba(${v},${v - 2},${v - 5},0.35)`; g.fillRect(Math.random() * S, Math.random() * S, 2 + Math.random() * 5, 2 + Math.random() * 5); }
   const c = S / B;
   for (let y = 0; y < B; y++) { g.fillStyle = 'rgba(20,19,18,0.6)'; g.fillRect(0, y * c + c - 5, S, 5);
     for (let x = 0; x < B; x++) { const wx = x * c + c * 0.22, wy = y * c + c * 0.2, ww = c * 0.56, wh = c * 0.52, r = Math.random();
-      g.fillStyle = r < 0.07 ? '#c89a5a' : r < 0.3 ? '#16181b' : '#0c0e10'; g.fillRect(wx, wy, ww, wh);
-      if (r < 0.07) { e.fillStyle = '#ffb060'; e.fillRect(wx, wy, ww, wh); } else if (r > 0.85) { g.fillStyle = '#060606'; g.fillRect(wx - 2, wy - 2, ww + 4, wh + 4); } } }
+      g.fillStyle = '#5c5852'; g.fillRect(wx - 3, wy - 3, ww + 6, wh + 6); g.fillStyle = '#68635c'; g.fillRect(wx - 5, wy + wh + 2, ww + 10, 5);
+      g.fillStyle = r < 0.12 ? '#c89a5a' : r < 0.35 ? '#1c1f23' : '#101215'; g.fillRect(wx, wy, ww, wh);
+      if (r < 0.12) { e.fillStyle = '#ffb060'; e.fillRect(wx, wy, ww, wh); } else if (r > 0.85) { g.fillStyle = '#060606'; g.fillRect(wx - 2, wy - 2, ww + 4, wh + 4); } } }
   const t = new THREE.CanvasTexture(cv), te = new THREE.CanvasTexture(ev); for (const x of [t, te]) { x.wrapS = x.wrapT = THREE.RepeatWrapping; x.anisotropy = 8; } t.colorSpace = te.colorSpace = THREE.SRGBColorSpace;
-  const m = new THREE.MeshStandardMaterial({map: t, emissiveMap: te, emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.88, metalness: 0.05}); m.userData.cell = 28;
+  const m = new THREE.MeshStandardMaterial({map: t, emissiveMap: te, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.88, metalness: 0.05}); m.userData.cell = 28;
   matCache.set('win', m); return m;
 }
 // server rack / pylon panels with glowing strips
@@ -197,6 +199,16 @@ const C = {
     if (solid) BOXES.push({x0, x1, z0, z1, h});
     return mesh;
   },
+  // a ring of windowed buildings around the play area, merged into one mesh; solid so the camera never slips behind them
+  ring(list) {
+    const m = windowsMat(), cell = m.userData.cell, geos = [];
+    for (const [x0, x1, z0, z1, h] of list) {
+      const w = x1 - x0, d = z1 - z0, y0 = GROUND - 0.1, H = h - y0, g = new THREE.BoxGeometry(w, H, d); scaleBoxUV(g, w, H, d, cell);
+      const uv = g.attributes.uv; for (let k = 8; k < 16; k++) uv.setXY(k, 0.02, 0.02); // roofs and floors take plain wall colour
+      g.translate((x0 + x1) / 2, y0 + H / 2, (z0 + z1) / 2); geos.push(g.toNonIndexed()); BOXES.push({x0, x1, z0, z1, h});
+    }
+    const mesh = new THREE.Mesh(mergeGeometries(geos), m); mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh); return mesh;
+  },
   glow(color, size) { const s = sprite(glowTexture('rgba(255,255,255,1)', '#' + new THREE.Color(color).getHexString() + '99')); s.scale.setScalar(size); scene.add(s); return s; },
   beam(x, z, color, r) {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.6, 420, 24, 1, true), new THREE.MeshBasicMaterial({color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false}));
@@ -276,12 +288,12 @@ function buildGrid(segs) {
       vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }',
       fragmentShader: `uniform vec3 uP; uniform float uT; uniform vec2 uA, uN; varying vec3 vW;
         float ln(float v, float w){ float f = abs(fract(v) - 0.5); return smoothstep(0.5 - w, 0.5, f); }
-        void main(){ float d = distance(vW.xz, uP.xz); float near = smoothstep(42.0, 6.0, d), far = smoothstep(170.0, 30.0, d);
+        void main(){ float d = distance(vW.xz, uP.xz); float near = smoothstep(24.0, 5.0, d), far = smoothstep(170.0, 30.0, d);
           float side = smoothstep(0.5, 4.0, dot(cameraPosition.xz - uA, uN));
           float along = (vW.x + vW.z) / 3.0, up = vW.y / 3.0;
           float g = max(ln(along, 0.022), ln(up, 0.022)); float scan = smoothstep(0.92, 1.0, sin(vW.y * 0.5 - uT * 3.0));
           float base = pow(1.0 - clamp(vW.y / 26.0, 0.0, 1.0), 3.0);
-          float a = ((g * 0.6 + scan * 0.25 + 0.04) * near * (1.0 - vW.y / 32.0) + base * 0.5 * far) * side;
+          float a = ((g * 0.6 + scan * 0.25 + 0.04) * near * (1.0 - vW.y / 32.0) + base * 0.22 * far) * side;
           gl_FragColor = vec4(vec3(1.0, 0.24, 0.1) * a, a); }`});
     const g = new THREE.PlaneGeometry(len, 30); g.translate(0, 15 - 0.2, 0);
     const w = new THREE.Mesh(g, mat); w.position.set((ax + bx) / 2, 0, (az + bz) / 2); w.rotation.y = Math.atan2(bz - az, bx - ax) * -1; w.frustumCulled = false; scene.add(w);
@@ -470,7 +482,7 @@ function makeCore() {
       if (this.shielded) { if (!this.warned) { this.warned = true; showHint('The Core is shielded while its Titans stand. Bring them down first.', 5); } return; }
       this.hp -= n; mission.coreHud(); if (this.hp <= 0) { this.hp = 0; this.state = 'dead'; mission.onCoreDestroyed(); }
     }};
-  addBox(hb, coreEnt);
+  addBox(hb, coreEnt); CAMBOXES.push({x0: b.min.x, x1: b.max.x, z0: b.min.z, z1: b.max.z, h: b.max.y});
   const mats = []; m.traverse(o => { if (o.isMesh) mats.push(o.material); });
   W.ticks.push(dt => { const k = coreEnt.state === 'dead' ? 0 : coreEnt.shielded ? 0.6 : 1.0 + 0.6 * Math.max(0, Math.sin(W.t * 6));
     for (const mt of mats) mt.emissiveIntensity = (0.55 + 0.35 * Math.sin(W.t * 2.4)) * k;
@@ -597,6 +609,7 @@ function enemyShot(m, tgt, dist) {
 const player = {mech: null, camYaw: Math.PI, camPitch: 0.06, heat: 0, lock: false, fireT: 0, rockets: 6, rocketT: 0, reloadT: 0, holdE: 0, hurt: 0, aim: V3(), aimTarget: null};
 const stats = {shots: 0, hits: 0, kills: 0, hijacks: 0, start: 0, time: 0, armorLost: 0};
 const keys = {}; let mouseFire = false, mouseRocket = false, locked = false;
+const tap = {fire: false, rocket: false, reload: false}; // presses shorter than a frame still count
 const bot_ = {stuck: 0, side: 0, last: V3()};
 function bot(dt) { // test autopilot: face the nearest enemy, close in, fire, hijack when possible
   const m = player.mech; let best = null, bd = 1e9;
@@ -610,7 +623,7 @@ function bot(dt) { // test autopilot: face the nearest enemy, close in, fire, hi
   // unstick: if the walk is blocked, sidestep for a moment
   if (bot_.side > 0) { bot_.side -= dt; keys.KeyD = true; keys.KeyW = true; return; }
   const cand = hijackCandidate(); if (cand && cand.team === 'enemy' && (m.armor / m.maxArmor < 0.7 || cand.titan || !stats.hijacks)) { const d = cand.pos.clone().sub(m.pos); player.camYaw = Math.atan2(d.x, d.z); keys.KeyE = true; keys.KeyW = d.length() > cand.r + m.r + 3; return; }
-  const down = mechs.find(o => o.state === 'down' && o.team === 'enemy' && (o.titan || !stats.hijacks)); if (down && (!best || down.titan)) { const d = down.pos.clone().sub(m.pos); player.camYaw = Math.atan2(d.x, d.z); keys.KeyW = true; botMove(dt); return; }
+  const down = mechs.find(o => o.state === 'down' && o.team === 'enemy' && (o.titan || !stats.hijacks)); if (down) { const d = down.pos.clone().sub(m.pos); player.camYaw = Math.atan2(d.x, d.z); keys.KeyW = true; botMove(dt); return; }
   if (!best) { const d = V3(LV.rally[0] - m.pos.x, 0, LV.rally[1] - m.pos.z); keys.KeyW = mission.mode !== 'survival' && d.length() > 12; if (keys.KeyW) player.camYaw = turnTo(player.camYaw, Math.atan2(d.x, d.z), 0.08); botMove(dt); return; }
   if (blind) { const d = best.pos.clone().sub(m.pos); player.camYaw = turnTo(player.camYaw, steer(m, Math.atan2(d.x, d.z)), 0.08); keys.KeyW = true; botMove(dt); return; }
   const d = best.center.sub(camera.position); player.camYaw = turnTo(player.camYaw, Math.atan2(d.x, d.z), 0.08); player.camPitch = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)) + 0.02, -0.42, 0.5);
@@ -650,7 +663,7 @@ function playerControl(dt) {
     if (m.edge && W.t - (player.edgeWarn || -99) > 6) { player.edgeWarn = W.t; showHint('AI defense grid. Machines cannot cross it. Turn back to the fight.', 3.5); sound.overheat(); } }
   // cannons with heat
   player.fireT -= dt;
-  const firing = keys.Space || keys.KeyF || mouseFire;
+  const firing = keys.Space || keys.KeyF || mouseFire || tap.fire; tap.fire = false;
   if (firing && !player.lock && player.fireT <= 0) {
     player.fireT = 0.1; const i = (m.armIdx ^= 1), from = m.muzzle(i), dir = player.aim.clone().sub(from).normalize();
     dir.add(V3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(0.006)).normalize();
@@ -663,13 +676,15 @@ function playerControl(dt) {
   // rockets
   player.rocketT -= dt;
   if (player.reloadT > 0) { player.reloadT -= dt; if (player.reloadT <= 0) { player.rockets = 6; sound.servo(0); } }
-  if ((keys.KeyQ || mouseRocket) && player.rockets > 0 && player.rocketT <= 0 && player.reloadT <= 0) {
+  const wantRocket = keys.KeyQ || mouseRocket || tap.rocket; tap.rocket = false;
+  if (wantRocket && player.rockets > 0 && player.rocketT <= 0 && player.reloadT <= 0) {
     player.rocketT = 0.22; player.rockets--; const side = player.rockets % 2 ? 1 : -1;
     const from = m.eye.add(V3(0, 0.9 * s, 0)).add(rightOf(m.aimYaw).multiplyScalar(side * 1.3 * s));
     launchRocket(from, player.aim.clone().sub(from).normalize(), 'player', player.aimTarget && player.aimTarget.state !== 'dead' ? player.aimTarget : null); stats.shots++;
     if (player.rockets === 0) player.reloadT = 5;
   }
-  if (keys.KeyR && player.rockets < 6 && player.reloadT <= 0) player.reloadT = 5 * (1 - player.rockets / 12);
+  const wantReload = keys.KeyR || tap.reload; tap.reload = false;
+  if (wantReload && player.rockets < 6 && player.reloadT <= 0) player.reloadT = 5 * (1 - player.rockets / 12);
   // hijack: hold E next to an overheated mech
   const cand = hijackCandidate();
   if (cand && keys.KeyE) { player.holdE += dt; if (player.holdE >= 1.3) { player.holdE = 0; hijack(cand); } } else player.holdE = Math.max(0, player.holdE - dt * 2);
@@ -704,13 +719,14 @@ function camRig(m) {
   const dir = V3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
   const dist = m.titan ? 18 : 13.5;
   let pos = pivot.clone().addScaledVector(dir, -dist).addScaledVector(rightOf(yaw), (m.titan ? 5.2 : 4.0)).add(V3(0, 1.0 * s, 0));
-  const t = segBoxes(pivot, pos); if (t !== null) pos = pivot.clone().lerp(pos, Math.max(0.15, t - 0.06));
+  const t = segBoxes(pivot, pos, CAMBOXES.length ? BOXES.concat(CAMBOXES) : BOXES); if (t !== null) pos = pivot.clone().lerp(pos, Math.max(0.15, t - 0.06));
   pos.y = Math.max(pos.y, 1.2);
   return {pos, dir};
 }
 function updateAim() {
   const r = camRig(player.mech), far = camera.position.clone().addScaledVector(r.dir, 420);
-  const h = hitTest(camera.position.clone().addScaledVector(r.dir, 4), far, 'player', player.mech);
+  // start the ray just past our own mech, so the machine we left behind (or anything beside us) never steals the crosshair
+  const h = hitTest(camera.position.clone().addScaledVector(r.dir, Math.max(4, camera.position.distanceTo(player.mech.eye) + 2.5)), far, 'player', player.mech);
   player.aim = h ? h.point : far; player.aimTarget = h && (h.kind === 'mech' || h.kind === 'droid' || (h.kind === 'core' && !h.obj.shielded)) && h.obj.team !== 'player' ? h.obj : null;
   if (player.aim.distanceTo(player.mech.eye) < 9) player.aim = player.mech.eye.addScaledVector(r.dir, 60);
   $('xhair').classList.toggle('on', !!player.aimTarget);
@@ -721,9 +737,13 @@ function applyCamera(dt) {
   const ph = mission.phase;
   if (ph === 'title') { const t = W.t * 0.08, m = player.mech, c = m.pos; camera.position.set(c.x + Math.sin(t) * 19, 4.2 + Math.sin(t * 0.7) * 0.8, c.z + Math.cos(t) * 19 - 4); camera.lookAt(c.x, 4.5, c.z - 4); return; }
   if (ph === 'intro') { const k = clamp(mission.t / mission.introLen, 0, 1), e = k * k * (3 - 2 * k), m = player.mech, c = m.pos;
-    const a = V3(c.x - 3.5, 1.1, c.z - 9), b = camRig(m).pos; camera.position.copy(a.lerp(b, e)); const look = V3(c.x, 5.5, c.z).lerp(camRig(m).pos.addScaledVector(camRig(m).dir, 40), e); camera.lookAt(look); return; }
+    // crane shot: from low in front, up and over the mech's head (never through it or the street walls), down to the shoulder camera
+    const r = camRig(m), a = V3(c.x - 3.5, 1.1, c.z - 9), p = a.clone().lerp(r.pos, e); p.y += Math.sin(e * Math.PI) * 13 * m.s;
+    camera.position.copy(p); camera.lookAt(V3(c.x, 5.5 * m.s, c.z).lerp(r.pos.clone().addScaledVector(r.dir, 40), e * e)); return; }
   if (ph === 'transfer') { const T = mission.transfer, k = clamp(T.t / 2.4, 0, 1), e = k * k * (3 - 2 * k), to = camRig(player.mech);
-    const mid = T.from.pos.clone().lerp(to.pos, e).add(V3(0, Math.sin(k * Math.PI) * 2.5, 0)); camera.position.copy(mid); camera.lookAt(player.mech.center.lerp(to.pos.clone().addScaledVector(to.dir, 40), e * e)); return; }
+    let mid = T.from.pos.clone().lerp(to.pos, e).add(V3(0, Math.sin(k * Math.PI) * 2.5, 0));
+    const piv = player.mech.pos.clone().add(V3(0, player.mech.titan ? 8.6 : 6.4, 0)), hitT = segBoxes(piv, mid); if (hitT !== null) mid = piv.lerp(mid, Math.max(0.15, hitT - 0.06)); // keep the swing out of walls
+    camera.position.copy(mid); camera.lookAt(player.mech.center.lerp(to.pos.clone().addScaledVector(to.dir, 40), e * e)); return; }
   const r = camRig(player.mech); camera.position.copy(r.pos); camera.lookAt(r.pos.clone().add(r.dir));
   if (fx.shake > 0) { const s = fx.shake * 0.35; camera.position.add(V3(rand(-s, s), rand(-s, s), rand(-s, s))); }
 }
@@ -762,6 +782,7 @@ const mission = {
   },
   // campaign waves come from the level data
   startWave(i) {
+    if (this.ended) return;
     const w = LV.waves[i], n = i + 1; this.wave = n; this.done = 0; let need = 0;
     if (w.banner) { showBanner(w.banner[0], w.banner[1], 3.6, true); sound.alarm(); if (w.titans) later(1.2, () => sound.alarm()); }
     scoreIntensity(Math.min(1, 0.4 + i * 0.3));
@@ -887,7 +908,7 @@ function drawRadar() {
 const canvas = $('c');
 addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-  keys[e.code] = true;
+  keys[e.code] = true; if (playing() && !e.repeat) { if (e.code === 'KeyQ') tap.rocket = true; if (e.code === 'KeyR') tap.reload = true; if (e.code === 'Space' || e.code === 'KeyF') tap.fire = true; }
   if (mission.phase === 'intro' && mission.t > 0.8 && !['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) mission.t = mission.introLen;
   if (e.code === 'KeyM') toggleMute();
   if (e.code === 'Escape' && playing()) setPause(true); if (e.code === 'KeyP' && playing()) setPause(!paused);
@@ -897,7 +918,7 @@ addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouseFir
 canvas.addEventListener('mousedown', e => {
   if (!playing() || paused) return;
   if (!locked) lockPointer();
-  if (e.button === 0) mouseFire = true; if (e.button === 2) mouseRocket = true;
+  if (e.button === 0) { mouseFire = true; tap.fire = true; } if (e.button === 2) { mouseRocket = true; tap.rocket = true; }
 });
 addEventListener('mouseup', e => { if (e.button === 0) mouseFire = false; if (e.button === 2) mouseRocket = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -943,7 +964,7 @@ function endGame(win, text) {
 function buildMenu() {
   document.title = 'AI Parabellum: ' + LV.name; $('msg').textContent = 'LOADING ' + LV.name.toUpperCase();
   const label = `MISSION ${LV.n} · ${LV.name.toUpperCase()}`; $('tag').textContent = label; $('bPlay').textContent = label; $('brief').textContent = LV.brief;
-  $('bSurv').hidden = !LV.survival;
+  $('bSurv').hidden = !LV.survival; $('pauseName').textContent = LV.name;
   const sv = save.get(), ol = $('campList'); ol.textContent = '';
   for (const l of LEVELS) { const li = document.createElement('li'), b = document.createElement('button'), s = document.createElement('span');
     b.type = 'button'; b.textContent = l.name; b.onclick = () => l === LV ? deploy('campaign') : goLevel(l.id);
@@ -978,15 +999,15 @@ function step(dt) {
   lightning(dt);
 }
 const clock = new THREE.Clock();
-function frame() {
-  const dt = Math.min(clock.getDelta(), 0.05);
+const frame = () => render(Math.min(clock.getDelta(), 0.05));
+function render(dt) {
   step(dt);
   applyCamera(dt); camera.updateMatrixWorld();
   if (player.mech && mission.phase !== 'title' && !DBGCAM) updateAim();
   // sun shadows and the headlight follow the action
   const pm = player.mech; if (pm) { const [dx, dy, dz] = LV.sun.dir; moon.target.position.set(pm.pos.x, 0, pm.pos.z - 18); moon.position.set(pm.pos.x + dx, dy, pm.pos.z - 18 + dz);
-    const hp = pm.eye.add(fwdOf(pm.aimYaw).multiplyScalar(1.4 * pm.s)); headlight.position.copy(hp); headlight.target.position.copy(player.aim && mission.phase === 'fight' ? player.aim : hp.clone().add(fwdOf(pm.heading).multiplyScalar(30)).setY(0)); headlight.intensity = pm.state === 'active' && mission.phase !== 'transfer' ? LV.headlight : 0; }
-  weather(dt, camera); if (pm) { if (mission.phase === 'title') gridU.uP.value.set(0, 0, 9999); else gridU.uP.value.copy(pm.pos); } gridU.uT.value = W.t;
+    const hp = pm.eye.add(fwdOf(pm.aimYaw).multiplyScalar(1.4 * pm.s)); headlight.position.copy(hp); headlight.target.position.copy(player.aim && mission.phase === 'fight' ? player.aim : hp.clone().add(fwdOf(pm.heading).multiplyScalar(30)).setY(0)); headlight.intensity = pm.state === 'active' && mission.phase !== 'transfer' ? LV.headlight * clamp(hp.distanceTo(headlight.target.position) / 28, 0.12, 1) : 0; }
+  weather(dt, camera); if (pm) { if (mission.phase === 'title' || mission.phase === 'intro') gridU.uP.value.set(0, 0, 9999); else gridU.uP.value.copy(pm.pos); } gridU.uT.value = W.t;
   if (mission.phase !== 'title') updateHud(dt);
   grade.uniforms.uTime.value = W.t;
   composer.render();
@@ -1011,9 +1032,13 @@ loadAll().then(() => {
   const [sx, sz, sh] = LV.start; player.mech = new Mech('striker', 'player', sx, sz, sh); player.camYaw = sh;
   $('load').classList.add('done'); $('title').classList.toggle('hidden', !!DBGCAM); if (DBGCAM && DBGCAM[6]) scene.fog = null;
   if (Q.has('boxes')) for (const bx of BOXES) { const m = new THREE.Mesh(new THREE.BoxGeometry(bx.x1 - bx.x0, bx.h + 0.2, bx.z1 - bx.z0), new THREE.MeshBasicMaterial({color: bx.ent ? 0xff3020 : 0x30ff60, wireframe: true, fog: false})); m.position.set((bx.x0 + bx.x1) / 2, bx.h / 2, (bx.z0 + bx.z1) / 2); scene.add(m); }
-  renderer.setAnimationLoop(frame);
-  window.__lt = {ready: true, scene, camera, THREE};
-  window.__g = {mission, player, mechs, droids, stats, keys, deploy, step, fx, BOXES, LV};
+  const REC = Q.has('rec'); // video capture: the page advances one fixed 1/30 s frame per call instead of running in real time
+  if (REC) { startRecording(() => W.t); for (const id of ['hint', 'lockHint']) $(id).style.visibility = 'hidden'; } else renderer.setAnimationLoop(frame);
+  window.__lt = {ready: true, scene, camera, THREE, renderer};
+  window.__g = {mission, player, mechs, droids, stats, keys, deploy, step, fx, BOXES, LV, endGame, save, get core() { return coreEnt; }};
+  if (REC) window.__g.rec = {get t() { return W.t; }, frame: () => render(1 / 30), audio: (t0, dur, o) => renderRecording(t0, dur, {rain: LV.weather === 'rain', ...o}),
+    // fast-forward without drawing, until cond() holds or max seconds pass
+    ff(max, cond) { for (let s = 0; s < max; s += 1 / 30) { if (cond && cond()) return true; step(1 / 30); applyCamera(1 / 30); camera.updateMatrixWorld(); updateAim(); updateHud(1 / 30); } return !cond; }};
   if (Q.has('play')) { deploy(Q.get('mode') || 'campaign'); if (Q.has('t')) { const T = +Q.get('t'); for (let s = 0; s < T; s += 1 / 30) { step(1 / 30); applyCamera(1 / 30); camera.updateMatrixWorld(); updateAim(); updateHud(1 / 30); }
     const pm = player.mech; console.log('SIM', JSON.stringify({level: LV.id, phase: mission.phase, wave: mission.wave, done: mission.done, need: mission.need, armor: Math.round(pm.armor), kind: pm.kind, state: pm.state, pos: [Math.round(pm.pos.x), Math.round(pm.pos.z)], kills: stats.kills, hijacks: stats.hijacks, mechs: mechs.map(m => m.kind[0] + ':' + m.team[0] + ':' + m.state + ':' + Math.round(m.armor)).join(' '), droids: droids.filter(d => d.state !== 'dead').length, core: coreEnt ? Math.round(coreEnt.hp) : null, ended: mission.ended, endT: $('endT').textContent})); } }
 }).catch(e => { msg.textContent = 'COULD NOT LOAD: ' + e.message; console.error(e); });

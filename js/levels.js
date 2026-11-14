@@ -5,7 +5,7 @@
 const city = {
   id: 'city', n: 1, name: 'Fallen City', sub: '02:14 · AI CONTROLLED DISTRICT',
   brief: 'The AI took the city in one night. You hold a captured striker at the south end of the main street. Push north, break their patrols, and when one of their machines overheats, climb in and make it yours.',
-  sky: {hdr: 'night', bg: 0.1, env: 0.45}, fog: [0x0d131c, 0.0085], exposure: 1,
+  sky: {hdr: 'night', bg: 0.07, env: 0.45}, fog: [0x0d131c, 0.0085], exposure: 1,
   sun: {color: 0x9db4e0, power: 1.5, dir: [-35, 70, 25]}, hemi: [0x3a4a66, 0x0b0907, 0.6],
   weather: 'rain', lightning: true, headlight: 260,
   ground: {tex: 'asphalt_02', repeat: 110, color: 0x8a8a8a, rough: 0.42, metal: 0.05, size: 640, at: [7, -60]},
@@ -14,7 +14,7 @@ const city = {
   bounds: {x0: -46, x1: 60, z0: -130, z1: 7},
   boxes: [{x0: -60, x1: 0.6, z0: -32, z1: 12, h: 13}, {x0: 14.8, x1: 80, z0: -39.5, z1: 12, h: 26}],
   grid: [[[-46, -130], [60, -130]], [[-46, -130], [-46, -32]], [[60, -130], [60, -39.5]], [[0.6, 7], [14.8, 7]]],
-  start: [7.5, 3, Math.PI], rally: [8, -60], survivalStart: [8, -66],
+  start: [7.5, -4, Math.PI], rally: [8, -60], survivalStart: [8, -66],
   survival: {
     droids: [[-30, -60], [-34, -76], [-30, -96], [-20, -112], [-4, -118], [14, -116], [30, -118], [44, -104], [48, -84], [46, -62], [26, -50], [-12, -48], [0, -100], [20, -92]],
     mechs: [[-38, -122], [8, -124], [52, -120], [-40, -84], [54, -74]], titan: [8, -124], face: [8, -70],
@@ -47,8 +47,18 @@ const city = {
     if (cards) c.dropCards(cards, [[6.8, 7.3, 11.9, 20.6]]); // a lone card in the street behind the start
     c.block(-24, -3.85, -30.4, 3.2, 12.3, {solid: false});
     c.block(23.45, 32.0, -39.0, 3.2, 23.7, {solid: false});
+    // close the city in: buildings on every side just outside the defense grid, so no camera angle shows the edge of the set
+    const seg = (x0, x1, z0, z1, n, hs, alongX) => { const out = []; for (let i = 0; i < n; i++) { const a = i / n, b = (i + 1) / n, h = hs[i % hs.length];
+      out.push(alongX ? [x0 + (x1 - x0) * a, x0 + (x1 - x0) * b, z0, z1, h] : [x0, x1, z0 + (z1 - z0) * a, z0 + (z1 - z0) * b, h]); } return out; };
+    c.ring([
+      ...seg(-64, 0.45, 3.6, 28, 4, [13, 18, 11, 16], true), [0.45, 14.45, 9, 28, 17], ...seg(14.45, 80, 3.6, 28, 4, [21, 15, 24, 18], true),
+      ...seg(-66, -48, -150, -32, 8, [14, 20, 12, 17, 22, 13, 18, 15], false),
+      ...seg(62, 80, -150, -41, 7, [19, 13, 23, 16, 12, 20, 17], false),
+      ...seg(-48, 62, -150, -132, 7, [16, 24, 13, 19, 26, 15, 21], true),
+    ]);
     // windowed fronts over the bare ends of the two street facades that face the start
     c.block(-24, 0.45, 3.2, 3.6, 12.3, {solid: false}); c.block(14.45, 32.0, 3.2, 3.6, 23.7, {solid: false});
+    c.block(-24, 0.45, -31.6, -30.4, 12.3, {solid: false}); c.block(14.45, 32.0, -39.5, -38.3, 23.7, {solid: false}); // and their north ends
     c.block(21.75, 29.5, -70.1, -62, 10.3);
     c.block(15.4, 23.4, -49.2, -41.7, 16.8);
     c.block(-12, -4.05, -51.1, -48.5, 12.3);
@@ -78,7 +88,7 @@ const city = {
 const desert = {
   id: 'desert', n: 2, name: 'Desert Air Base', sub: '18:40 · AI FORWARD AIRFIELD',
   brief: 'The AI turned an old air base into a forward field for its gunships. Cross the runway, clear the drones off the apron, and take the hangar row before their Titan wakes up.',
-  sky: {hdr: 'sunset', bg: 0.85, env: 0.75}, fog: [0xb48a66, 0.0052], exposure: 0.9,
+  sky: {hdr: 'sunset', bg: 0.5, env: 0.6}, fog: [0x8a6c55, 0.0034], exposure: 0.78,
   sun: {color: 0xffb27a, power: 3.0, dir: [-70, 40, -25]}, hemi: [0xd6b48c, 0x3a2a1c, 0.85],
   weather: 'dust', headlight: 90,
   ground: {tex: 'sand_01', repeat: 80, color: 0xb3a596, rough: 0.95, metal: 0, size: 700, at: [0, -60]},
@@ -130,7 +140,7 @@ const desert = {
 const dam = {
   id: 'dam', n: 3, name: 'Frozen Dam', sub: '06:10 · HYDRO PLANT SEVEN',
   brief: 'The dam feeds power to the AI data farms in the valley below. Fight up the frozen spillway road to the wall, break the garrison, and the grid goes dark.',
-  sky: {hdr: 'snow', bg: 0.45, env: 0.55}, fog: [0x8f9aa6, 0.011], exposure: 0.62,
+  sky: {hdr: 'snow', bg: 0.4, env: 0.55}, fog: [0x7d8894, 0.0072], exposure: 0.62,
   sun: {color: 0xe8f0ff, power: 1.9, dir: [40, 60, 30]}, hemi: [0xb8c4d2, 0x3c444e, 0.7],
   weather: 'snow', headlight: 140,
   ground: {tex: 'snow_02', repeat: 70, color: 0xb4bcc6, rough: 0.85, metal: 0, size: 700, at: [0, -60]},
@@ -178,7 +188,7 @@ const dam = {
 const port = {
   id: 'port', n: 4, name: 'Container Port', sub: '11:30 · NORTH TERMINAL',
   brief: 'Every machine the AI builds ships out of this terminal. Fight through the container stacks, keep away from the open quay, and stop the last Titan before it is loaded.',
-  sky: {hdr: 'overcast', bg: 0.55, env: 0.75}, fog: [0x8a95a1, 0.0088], exposure: 0.88,
+  sky: {hdr: 'overcast', bg: 0.38, env: 0.7}, fog: [0x6c7783, 0.006], exposure: 0.8,
   sun: {color: 0xdde4ee, power: 1.7, dir: [30, 70, 40]}, hemi: [0xb8c4d0, 0x2a2e34, 0.9],
   weather: 'rain', headlight: 150,
   ground: {tex: 'concrete_floor_worn_001', repeat: 90, color: 0x8e8e8e, rough: 0.7, metal: 0.05, size: 700, at: [0, -60]},
@@ -224,7 +234,7 @@ const port = {
 const valley = {
   id: 'valley', n: 5, name: 'Server Valley', sub: '05:20 · AI DATA FARM',
   brief: 'The AI thinks in this valley. Rows of server racks run its war, and the fog never lifts. Walk the lanes, break the guard, and burn its memory down to the floor.',
-  sky: {hdr: 'misty', bg: 0.45, env: 0.55}, fog: [0x7f8e9e, 0.0155], exposure: 0.9,
+  sky: {hdr: 'misty', bg: 0.3, env: 0.55}, fog: [0x4a5664, 0.0095], exposure: 0.85,
   sun: {color: 0xd6e4ff, power: 1.4, dir: [-30, 60, 40]}, hemi: [0xa8b8c8, 0x1c2024, 0.75],
   weather: 'motes', headlight: 200,
   ground: {tex: 'concrete_floor_worn_001', repeat: 80, color: 0x5c6268, rough: 0.65, metal: 0.1, size: 700, at: [0, -60]},
@@ -263,10 +273,10 @@ const valley = {
 const core = {
   id: 'core', n: 6, name: 'The Core', sub: '00:00 · AI CORE CHAMBER',
   brief: 'This is where the AI lives. Two Titans guard the Core, and its shield holds while they stand. Bring them down, then burn the Core itself.',
-  sky: {hdr: 'night', bg: 0.06, env: 0.35}, fog: [0x1a0b10, 0.0105], exposure: 1.0,
+  sky: {hdr: 'night', bg: 0.06, env: 0.35, color: 0x050206}, fog: [0x1a0b10, 0.0105], exposure: 1.0,
   sun: {color: 0x9aa8d8, power: 1.1, dir: [-30, 70, 40]}, hemi: [0x502a34, 0x060304, 0.65],
-  weather: 'embers', headlight: 260,
-  ground: {tex: 'metal_plate', repeat: 90, color: 0x5a5d64, rough: 0.5, metal: 0.55, size: 700, at: [0, -60]},
+  weather: 'embers', headlight: 110,
+  ground: {tex: 'metal_plate', repeat: 90, color: 0x44474d, rough: 0.72, metal: 0.35, size: 700, at: [0, -60]},
   tex: ['metal_plate', 'cracked_concrete_wall'],
   assets: ['hangar', 'drone', 'barrel'],
   bounds: {x0: -50, x1: 50, z0: -134, z1: 10},
@@ -289,6 +299,7 @@ const core = {
     for (const [x, z] of [[-26, -30], [26, -30], [-34, -60], [34, -60], [-16, -70], [16, -70], [-30, -88], [30, -88]]) c.block(x - 2, x + 2, z - 2, z + 2, 9, {mat: pylon});
     // the Core
     const m = c.place('hangar', 26, 0, -112, {solid: false, emissive: 0xff2a14, emissivePower: 1.4});
+    m.traverse(o => { if (o.isMesh) o.material.color.setRGB(0.24, 0.21, 0.23); }); // dark machine, red glow
     c.core = m; c.beam(0, -112, 0xff3020, 5);
     const sh = new THREE.Mesh(new THREE.CylinderGeometry(25, 25, 34, 48, 1, true), new THREE.MeshBasicMaterial({color: 0xff2a1a, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide}));
     sh.position.set(0, 16, -112); scene.add(sh); c.shield = sh;

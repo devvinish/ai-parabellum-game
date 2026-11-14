@@ -56,7 +56,12 @@ const texLoader = new THREE.TextureLoader(manager);
 export const loadGLB = name => gltfLoader.loadAsync(BASE + 'models/' + name + '.glb');
 export const loadGLBOptional = path => gltfLoader.loadAsync(BASE + path).catch(() => null);
 export const loadTex = (name, srgb) => texLoader.loadAsync(BASE + 'tex/' + name + '.webp').then(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; });
-export const loadHDR = name => new RGBELoader(manager).loadAsync(BASE + 'sky/' + name + '.hdr');
+// skies load as float data with the sun or moon disc clamped, so it can't bloom into a white haze on the horizon
+export const loadHDR = async (name, peak = 5) => {
+  const t = await new RGBELoader(manager).setDataType(THREE.FloatType).loadAsync(BASE + 'sky/' + name + '.hdr'), d = t.image.data, n = d.length / 4;
+  for (let i = 0; i < n; i++) { const k = i * 4, m = Math.max(d[k], d[k + 1], d[k + 2]); if (m > peak) { const f = peak / m; d[k] *= f; d[k + 1] *= f; d[k + 2] *= f; } }
+  t.needsUpdate = true; return t;
+};
 
 /* ---------- model helpers ---------- */
 export function prep(root, {cast = true, receive = true} = {}) {
