@@ -130,12 +130,31 @@ function buildWorld() {
   const dmx = new THREE.AnimationMixer(dead); dmx.clipAction(clip('b2DeathPose1')).play(); dmx.update(0.01);
   CIRCLES.push({x: -6, z: -74, r: 3}); W.fires.push(new Fire(scene, V3(-6, 1.2, -74), 1.0));
 
+  buildGrid([[[BOUNDS.x0, BOUNDS.z0], [BOUNDS.x1, BOUNDS.z0]], [[BOUNDS.x0, BOUNDS.z0], [BOUNDS.x0, -32]], [[BOUNDS.x1, BOUNDS.z0], [BOUNDS.x1, -39.5]], [[0.6, BOUNDS.z1], [14.8, BOUNDS.z1]]]);
   rain = makeRain(scene, settings.high);
   headlight = new THREE.SpotLight(0xfff1dc, 260, 85, 0.36, 0.55, 1.3); headlight.castShadow = settings.high; headlight.shadow.mapSize.set(1024, 1024); headlight.shadow.bias = -0.0006;
   scene.add(headlight, headlight.target);
   W.titanLight = new THREE.SpotLight(0xff4030, 0, 90, 0.35, 0.5, 1.3); scene.add(W.titanLight, W.titanLight.target);
 }
 const clip = n => A.mech_striker.animations.find(a => a.name === n);
+// the AI defense grid: a red energy wall at the edge of the playable area, brightest near the player
+const gridU = {uP: {value: new THREE.Vector3()}, uT: {value: 0}};
+function buildGrid(segs) {
+  const mat = new THREE.ShaderMaterial({uniforms: gridU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    vertexShader: 'varying vec3 vW; varying vec2 vUv; void main(){ vUv = uv; vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }',
+    fragmentShader: `uniform vec3 uP; uniform float uT; varying vec3 vW; varying vec2 vUv;
+      float ln(float v, float w){ float f = abs(fract(v) - 0.5); return smoothstep(0.5 - w, 0.5, f); }
+      void main(){ float d = distance(vW.xz, uP.xz); float near = smoothstep(42.0, 6.0, d), far = smoothstep(170.0, 30.0, d);
+        float along = (vW.x + vW.z) / 3.0, up = vW.y / 3.0;
+        float g = max(ln(along, 0.022), ln(up, 0.022)); float scan = smoothstep(0.92, 1.0, sin(vW.y * 0.5 - uT * 3.0));
+        float base = pow(1.0 - clamp(vW.y / 26.0, 0.0, 1.0), 3.0);
+        float a = (g * 0.6 + scan * 0.25 + 0.04) * near * (1.0 - vW.y / 32.0) + base * 0.5 * far;
+        gl_FragColor = vec4(vec3(1.0, 0.24, 0.1) * a, a); }`});
+  for (const [[ax, az], [bx, bz]] of segs) {
+    const len = Math.hypot(bx - ax, bz - az), g = new THREE.PlaneGeometry(len, 30); g.translate(0, 15 - 0.2, 0);
+    const w = new THREE.Mesh(g, mat); w.position.set((ax + bx) / 2, 0, (az + bz) / 2); w.rotation.y = Math.atan2(bz - az, bx - ax) * -1; w.frustumCulled = false; scene.add(w);
+  }
+}
 
 // how far the root travels per second in a root-motion clip, for a 7.5 m striker; also the model's forward angle
 function measure(name) {
@@ -344,7 +363,7 @@ function explode(at, team, direct) {
 /* ---------- collision ---------- */
 function resolve(m) {
   const p = m.pos;
-  p.x = clamp(p.x, BOUNDS.x0 + m.r, BOUNDS.x1 - m.r); p.z = clamp(p.z, BOUNDS.z0 + m.r, BOUNDS.z1 - m.r);
+  const ex = p.x, ez = p.z; p.x = clamp(p.x, BOUNDS.x0 + m.r, BOUNDS.x1 - m.r); p.z = clamp(p.z, BOUNDS.z0 + m.r, BOUNDS.z1 - m.r); m.edge = ex !== p.x || ez !== p.z;
   for (const b of BOXES) { // push a circle out of a box
     const cx = clamp(p.x, b.x0, b.x1), cz = clamp(p.z, b.z0, b.z1), dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz);
     if (d < m.r) { if (d > 1e-4) { p.x = cx + dx / d * m.r; p.z = cz + dz / d * m.r; } else { const opts = [[b.x0 - m.r - p.x, 0], [b.x1 + m.r - p.x, 0], [0, b.z0 - m.r - p.z], [0, b.z1 + m.r - p.z]].sort((u, v) => Math.hypot(...u) - Math.hypot(...v)); p.x += opts[0][0]; p.z += opts[0][1]; } }
@@ -410,7 +429,7 @@ function bot() { // test autopilot: face the nearest enemy, close in, fire, hija
   for (const k of ['KeyW', 'Space', 'KeyQ', 'KeyE']) keys[k] = false;
   const cand = hijackCandidate(); if (cand && (m.armor / m.maxArmor < 0.7 || cand.titan || !stats.hijacks)) { const d = cand.pos.clone().sub(m.pos); player.camYaw = Math.atan2(d.x, d.z); keys.KeyE = true; keys.KeyW = d.length() > cand.r + m.r + 3; return; }
   const down = mechs.find(o => o.state === 'down' && o.team === 'enemy'); if (down && !stats.hijacks) { const d = down.pos.clone().sub(m.pos); player.camYaw = Math.atan2(d.x, d.z); keys.KeyW = true; return; }
-  if (!best) { keys.KeyW = m.pos.z > -60; player.camYaw = Math.PI; return; }
+  if (!best) { keys.KeyW = mission.mode !== 'survival' && m.pos.z > -60; player.camYaw = Math.PI; return; }
   const d = best.center.sub(camera.position); player.camYaw = turnTo(player.camYaw, Math.atan2(d.x, d.z), 0.08); player.camPitch = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)) + 0.02, -0.42, 0.5);
   keys.KeyW = bd > 30; keys.Space = bd < 110 && !player.lock; keys.KeyQ = best instanceof Mech && bd < 80 && Math.random() < 0.3;
 }
@@ -424,6 +443,7 @@ function playerControl(dt) {
   m.aimYaw = cy; m.aimPitch = player.camPitch * 0.9 + 0.02;
   // aim the torso at whatever the crosshair is on
   if (player.aim) { const mz = m.eye; const d = player.aim.clone().sub(mz); m.aimYaw = Math.atan2(d.x, d.z); m.aimPitch = Math.atan2(d.y, Math.hypot(d.x, d.z)); }
+  const p0 = m.pos.clone();
   if (f < -0.2 && Math.abs(sd) < 0.6) { // back away while facing the fight
     m.heading = turnTo(m.heading, cy, 1.6 * dt); m.speed = lerp(m.speed, 2.6 * s, dt * 3);
     m.pos.addScaledVector(fwdOf(m.heading), -m.speed * dt).addScaledVector(rightOf(cy), sd * 1.2 * dt); m.locomote('back', m.speed);
@@ -439,6 +459,10 @@ function playerControl(dt) {
     else { if (m.speed > 0.4) m.pos.addScaledVector(fwdOf(m.heading), m.speed * dt); m.locomote(m.speed > 0.6 ? 'walk' : 'idle', Math.max(m.speed, 0.6)); }
   }
   resolve(m);
+  // pushing against a wall: stop the walk cycle instead of marching on the spot
+  const moved = Math.hypot(m.pos.x - p0.x, m.pos.z - p0.z) / dt;
+  if ((f || sd) && m.speed > 1 && moved < m.speed * 0.3) { m.speed = Math.max(moved, 0); m.locomote('idle', 0.6);
+    if (m.edge && W.t - (player.edgeWarn || -99) > 6) { player.edgeWarn = W.t; showHint('AI defense grid. Machines cannot cross it. Turn back to the fight.', 3.5); sound.overheat(); } }
   // cannons with heat
   player.fireT -= dt;
   const firing = keys.Space || keys.KeyF || mouseFire;
@@ -520,9 +544,32 @@ function applyCamera(dt) {
 /* ---------- mission ---------- */
 const STREET_DROIDS = [['cyborg', 4.2, -27.5], ['cyborg', 11.4, -28.5], ['cyborg', 3.4, -31], ['cyborg', 12.0, -32.5], ['biped', 5.2, -35], ['biped', 11.0, -37]];
 const SQUARE_DROIDS = [['biped', -12, -60], ['cyborg', -8, -64], ['cyborg', 27, -58], ['biped', 32, -63], ['cyborg', 6, -86], ['cyborg', 10, -86.5]];
+// saved progress, kept per browser; the game works the same if storage is blocked
+const save = {get() { try { return JSON.parse(localStorage.getItem('aipGame') || '{}'); } catch (e) { return {}; } }, set(v) { try { localStorage.setItem('aipGame', JSON.stringify({...save.get(), ...v})); } catch (e) {} }};
+const SV_DROIDS = [[-30, -60], [-34, -76], [-30, -96], [-20, -112], [-4, -118], [14, -116], [30, -118], [44, -104], [48, -84], [46, -62], [26, -50], [-12, -48], [0, -100], [20, -92]];
+const SV_MECHS = [[-38, -122], [8, -124], [52, -120], [-40, -84], [54, -74]];
 const mission = {
-  phase: 'title', t: 0, wave: 0, introLen: 5, hijackHinted: false, ended: false, titan: null,
-  start() { this.phase = 'intro'; this.t = 0; stats.start = W.t; showBanner('FALLEN CITY', '02:14 · AI CONTROLLED DISTRICT', 4); scoreIntensity(0.4); },
+  phase: 'title', t: 0, wave: 0, introLen: 5, hijackHinted: false, ended: false, titan: null, mode: 'campaign', score: 0,
+  start() { this.phase = 'intro'; this.t = 0; stats.start = W.t;
+    if (this.mode === 'survival') { this.introLen = 3.5; showBanner('SURVIVAL', 'HOLD THE SQUARE AS LONG AS YOU CAN', 3.2); }
+    else showBanner('FALLEN CITY', '02:14 · AI CONTROLLED DISTRICT', 4);
+    scoreIntensity(0.4); },
+  // survival: endless waves that grow, a Titan every fifth wave
+  svNext() {
+    const n = ++this.wave, titanWave = n % 5 === 0; this.done = 0;
+    for (let i = droids.length - 1; i >= 0; i--) if (droids[i].state === 'dead') { scene.remove(droids[i].root); droids.splice(i, 1); }
+    for (let i = mechs.length - 1; i >= 0; i--) if (mechs[i].state === 'dead' && mechs[i].wave < n - 1) { scene.remove(mechs[i].root); mechs.splice(i, 1); }
+    const downs = mechs.filter(m => m.state === 'down'); while (downs.length > 5) downs.shift().destroy();
+    showBanner('WAVE ' + n, titanWave ? 'TITAN INBOUND' : n === 1 ? 'HERE THEY COME' : 'MORE OF THEM', 3.2, n > 1); if (n > 1) sound.alarm(); scoreIntensity(Math.min(1, 0.4 + n * 0.08));
+    const nd = Math.min(3 + n, 10), spots = SV_DROIDS.slice().sort(() => Math.random() - 0.5);
+    for (let i = 0; i < nd; i++) { const [x, z] = spots[i]; const d = new Droid(Math.random() < 0.5 ? 'cyborg' : 'biped', x + rand(-2, 2), z + rand(-2, 2), Math.atan2(8 - x, -70 - z)); d.wave = n; }
+    const ns = Math.min(1 + Math.floor(n / 2), 4) - (titanWave ? 1 : 0);
+    for (let i = 0; i < ns; i++) later(1 + i * 7, () => { const [x, z] = SV_MECHS[Math.floor(Math.random() * SV_MECHS.length)]; const m = new Mech('striker', 'enemy', x, z, Math.atan2(8 - x, -70 - z)); m.wave = n; m.armor = m.maxArmor = 680 + n * 25; });
+    if (titanWave) later(4, () => { const t = new Mech('titan', 'enemy', 8, -124, 0); t.wave = n; this.titan = t; const tl = W.titanLight; tl.position.set(0, 9.6, 1.5); tl.target.position.set(0, 0, 25); t.root.add(tl, tl.target); tl.intensity = 300; });
+    this.need = nd + ns + (titanWave ? 1 : 0); this.svHud();
+  },
+  svHud() { $('objText').textContent = 'Survive · wave ' + this.wave; $('objSub').textContent = `Score ${this.score.toLocaleString('en-US')} · ${Math.min(this.done, this.need)} / ${this.need} this wave`; },
+  addScore(base) { if (this.mode !== 'survival') return; this.score += Math.round(base * (1 + 0.15 * (this.wave - 1))); this.svHud(); },
   wave1() {
     this.wave = 1; for (const [k, x, z] of STREET_DROIDS) { const d = new Droid(k, x, z, 0.0); d.wave = 1; }
     const s = new Mech('striker', 'enemy', 8, -78, 0); s.wave = 1; s.mode = 'close';
@@ -542,24 +589,27 @@ const mission = {
     const tl = W.titanLight, tt = tl.target; tl.position.set(0, 9.6, 1.5); tt.position.set(0, 0, 25); this.titan.root.add(tl, tt); tl.intensity = 300;
     setObjective('Bring down the Titan', 'Overheat its core, then take it or finish it');
   },
-  progress() { $('objSub').textContent = this.wave === 3 ? $('objSub').textContent : `${Math.min(this.done, this.need)} / ${this.need} neutralised`; if (this.wave < 3 && this.done >= this.need) { this.wave === 1 ? later(2.5, () => this.wave2()) : later(3, () => this.wave3()); this.need = 1e9; } },
-  onDroid(d) { stats.kills++; if (d.wave === this.wave) { this.done++; this.progress(); } },
+  progress() {
+    if (this.mode === 'survival') { this.svHud(); if (this.done >= this.need && !this.ended) { this.need = 1e9; const pm = player.mech; if (pm && pm.state === 'active') pm.armor = Math.min(pm.maxArmor, pm.armor + pm.maxArmor * 0.15);
+      showBanner('WAVE ' + this.wave + ' CLEARED', 'FIELD REPAIR +15% ARMOR', 3); later(7, () => !this.ended && this.svNext()); } return; }
+    $('objSub').textContent = this.wave === 3 ? $('objSub').textContent : `${Math.min(this.done, this.need)} / ${this.need} neutralised`; if (this.wave < 3 && this.done >= this.need) { this.wave === 1 ? later(2.5, () => this.wave2()) : later(3, () => this.wave3()); this.need = 1e9; } },
+  onDroid(d) { stats.kills++; this.addScore(50); if (d.wave === this.wave) { this.done++; this.progress(); } },
   onDown(m) {
-    if (m.team === 'enemy') { if (m.wave === this.wave && !m.counted) { m.counted = true; this.done++; this.progress(); }
+    if (m.team === 'enemy') { this.addScore(m.titan ? 1500 : 250); if (m.wave === this.wave && !m.counted) { m.counted = true; this.done++; this.progress(); }
       if (!this.hijackHinted) { this.hijackHinted = true; showHint('Its core overheated. Walk up to it and HOLD E to take it over. Its armor comes back patched.', 9); }
-      if (m === this.titan) { setObjective('Hijack the Titan', 'Hold E beside it, or destroy it'); showBanner('TITAN DOWN', 'TAKE IT', 3); } }
+      if (m === this.titan && this.mode === 'campaign') { setObjective('Hijack the Titan', 'Hold E beside it, or destroy it'); showBanner('TITAN DOWN', 'TAKE IT', 3); } }
   },
   onDestroyed(m) {
-    if (m.team === 'enemy' || m.team === 'neutral') { if (m.team === 'enemy') stats.kills++; if (m.wave === this.wave && !m.counted) { m.counted = true; this.done++; this.progress(); } }
-    if (m === this.titan && !this.ended) { this.ended = true; showBanner('TITAN DESTROYED', 'THE DISTRICT IS OURS', 4); later(4.2, () => endGame(true, 'You destroyed the Titan. The AI lost Fallen City.')); }
+    if (m.team === 'enemy' || m.team === 'neutral') { if (m.team === 'enemy') stats.kills++; this.addScore(100); if (m.wave === this.wave && !m.counted) { m.counted = true; this.done++; this.progress(); } }
+    if (m === this.titan && !this.ended && this.mode === 'campaign') { this.ended = true; showBanner('TITAN DESTROYED', 'THE DISTRICT IS OURS', 4); later(4.2, () => endGame(true, 'You destroyed the Titan. The AI lost Fallen City.')); }
   },
   onHijack(m) {
-    showBanner('HIJACK COMPLETE', m.titan ? 'TITAN UNDER YOUR CONTROL' : 'NEW MACHINE ONLINE', 3);
-    if (m === this.titan && !this.ended) { this.ended = true; later(5.2, () => endGame(true, 'You turned their Titan against them. Fallen City is yours.')); }
+    showBanner('HIJACK COMPLETE', m.titan ? 'TITAN UNDER YOUR CONTROL' : 'NEW MACHINE ONLINE', 3); this.addScore(300);
+    if (m === this.titan && !this.ended && this.mode === 'campaign') { this.ended = true; later(5.2, () => endGame(true, 'You turned their Titan against them. Fallen City is yours.')); }
   },
   update(dt) {
     this.t += dt;
-    if (this.phase === 'intro' && this.t > this.introLen) { this.phase = 'fight'; this.t = 0; this.wave1(); }
+    if (this.phase === 'intro' && this.t > this.introLen) { this.phase = 'fight'; this.t = 0; if (this.mode === 'survival') { this.svNext(); showHint('Aim with the mouse, left click fires the cannons, right click or Q fires rockets. Overheated AI mechs can be hijacked with E.', 7); } else this.wave1(); }
     if (this.phase === 'transfer') { const T = this.transfer; T.t += dt; grade.uniforms.uGlitch.value = Math.max(0, 1 - T.t / 1.2) + (T.t > 1.9 && T.t < 2.1 ? 0.6 : 0);
       if (T.t > 1.35 && player.mech.state === 'boot') { player.mech.state = 'active'; player.mech.act.boot.fadeOut(0.4); player.mech.setGait('idle', 0.4); }
       if (T.t > 2.4) { this.phase = 'fight'; grade.uniforms.uGlitch.value = 0; } }
@@ -568,7 +618,7 @@ const mission = {
 function playerDestroyed() {
   const m = player.mech; m.state = 'dead'; m.act.death.reset().fadeIn(0.2).play(); for (const k of ['walk', 'run', 'back', 'idle']) m.act[k].fadeOut(0.2);
   fx.explosion(m.center, 1.6); sound.explosion(0, 1.5); fx.shake = 1.5; for (const e of m.eyes) e.visible = false; m.u.uDark.value *= 0.45;
-  if (!mission.ended) { mission.ended = true; later(3.2, () => endGame(false, 'Your machine was destroyed. Next time, take one of theirs before your armor runs out.')); }
+  if (!mission.ended) { mission.ended = true; later(3.2, () => endGame(false, mission.mode === 'survival' ? 'Your machine was destroyed.' : 'Your machine was destroyed. Next time, take one of theirs before your armor runs out.')); }
 }
 
 /* ---------- HUD ---------- */
@@ -663,19 +713,26 @@ $('bResume').onclick = () => setPause(false); $('bMute').onclick = toggleMute; $
 async function openCredits() { const box = $('cred'); box.hidden = false; if (!$('credList').children.length) { const list = await fetch(BASE + 'credits.json').then(r => r.json()).catch(() => []);
   for (const c of list) { const li = document.createElement('li'), a = document.createElement('a'); a.href = c.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = c.name; li.append(c.use + ': ', a, ' by ' + c.author); $('credList').append(li); } } }
 for (const id of ['bCredT', 'bCredP', 'bCredE']) $(id).onclick = openCredits; $('bCredX').onclick = () => $('cred').hidden = true;
-$('bPlay').onclick = () => deploy();
-function deploy() {
+$('bPlay').onclick = () => deploy('campaign'); $('bSurv').onclick = () => deploy('survival');
+function deploy(mode = 'campaign') {
+  mission.mode = mode;
+  if (mode === 'survival') { const m = player.mech; m.pos.set(8, GROUND, -66); m.heading = Math.PI; player.camYaw = Math.PI; m.place(); }
   initAudio(); sound.ui(); $('title').classList.add('hidden'); $('hud').classList.remove('hidden'); lockPointer();
   mission.start();
 }
 function endGame(win, text) {
   stats.time = W.t - stats.start; if (document.pointerLockElement) document.exitPointerLock();
-  $('endT').textContent = win ? 'MISSION COMPLETE' : 'MISSION FAILED'; $('endT').className = win ? 'win' : 'lose'; $('endP').textContent = text;
+  $('endT').textContent = win ? 'MISSION COMPLETE' : mission.mode === 'survival' ? 'SURVIVAL OVER' : 'MISSION FAILED'; $('endT').className = win ? 'win' : 'lose'; $('endP').textContent = text;
   const mm = Math.floor(stats.time / 60), ss = String(Math.floor(stats.time % 60)).padStart(2, '0');
-  $('endS').innerHTML = `<span>Time</span><b>${mm}:${ss}</b><span>Enemies neutralised</span><b>${stats.kills}</b><span>Machines hijacked</span><b>${stats.hijacks}</b><span>Accuracy</span><b>${stats.shots ? Math.round(stats.hits / stats.shots * 100) : 0}%</b>`;
+  let extra = '';
+  if (mission.mode === 'survival') { const best = save.get().best || {score: 0, wave: 0}, isBest = mission.score > best.score; if (isBest) save.set({best: {score: mission.score, wave: mission.wave}});
+    extra = `<span>Score</span><b>${mission.score.toLocaleString('en-US')}${isBest ? ' · NEW BEST' : ''}</b><span>Waves reached</span><b>${mission.wave}</b>`; }
+  if (win) save.set({m1: true});
+  $('endS').innerHTML = extra + `<span>Time</span><b>${mm}:${ss}</b><span>Enemies neutralised</span><b>${stats.kills}</b><span>Machines hijacked</span><b>${stats.hijacks}</b><span>Accuracy</span><b>${stats.shots ? Math.round(stats.hits / stats.shots * 100) : 0}%</b>`;
   $('end').classList.remove('hidden'); $('hud').classList.add('hidden'); scoreIntensity(0.2);
 }
 if (matchMedia('(pointer: coarse)').matches) $('touchNote').hidden = false;
+{ const sv = save.get(); if (sv.m1) $('m1s').textContent = 'COMPLETED'; if (sv.best) $('bestLine').textContent = `Best survival: wave ${sv.best.wave} · score ${sv.best.score.toLocaleString('en-US')}`; }
 
 /* ---------- loop ---------- */
 let nextFlash = 6, flashT = -1;
@@ -708,7 +765,7 @@ function frame() {
   // moonlight shadows and the headlight follow the action
   const pm = player.mech; if (pm) { moon.target.position.set(pm.pos.x, 0, pm.pos.z - 18); moon.position.set(pm.pos.x - 35, 70, pm.pos.z + 7);
     const hp = pm.eye.add(fwdOf(pm.aimYaw).multiplyScalar(1.4 * pm.s)); headlight.position.copy(hp); headlight.target.position.copy(player.aim && mission.phase === 'fight' ? player.aim : hp.clone().add(fwdOf(pm.heading).multiplyScalar(30)).setY(0)); headlight.intensity = pm.state === 'active' && mission.phase !== 'transfer' ? 260 : 0; }
-  rain(dt, camera);
+  rain(dt, camera); if (pm) { if (mission.phase === 'title') gridU.uP.value.set(0, 0, 9999); else gridU.uP.value.copy(pm.pos); } gridU.uT.value = W.t;
   if (mission.phase !== 'title') updateHud(dt);
   grade.uniforms.uTime.value = W.t;
   composer.render();
@@ -726,6 +783,6 @@ loadAll().then(() => {
   renderer.setAnimationLoop(frame);
   window.__lt = {ready: true, scene, camera, THREE};
   window.__g = {mission, player, mechs, droids, stats, keys, deploy, step, fx};
-  if (Q.has('play')) { deploy(); if (Q.has('t')) { const T = +Q.get('t'); for (let s = 0; s < T; s += 1 / 30) { step(1 / 30); applyCamera(1 / 30); camera.updateMatrixWorld(); updateAim(); updateHud(1 / 30); }
+  if (Q.has('play')) { deploy(Q.get('mode') || 'campaign'); if (Q.has('t')) { const T = +Q.get('t'); for (let s = 0; s < T; s += 1 / 30) { step(1 / 30); applyCamera(1 / 30); camera.updateMatrixWorld(); updateAim(); updateHud(1 / 30); }
     const pm = player.mech; console.log('SIM', JSON.stringify({phase: mission.phase, wave: mission.wave, done: mission.done, need: mission.need, armor: Math.round(pm.armor), kind: pm.kind, state: pm.state, kills: stats.kills, hijacks: stats.hijacks, mechs: mechs.map(m => m.kind[0] + ':' + m.team[0] + ':' + m.state + ':' + Math.round(m.armor)).join(' '), droids: droids.filter(d => d.state !== 'dead').length, ended: mission.ended})); } }
 }).catch(e => { msg.textContent = 'COULD NOT LOAD: ' + e.message; console.error(e); });

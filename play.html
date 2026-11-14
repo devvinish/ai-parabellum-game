@@ -37,8 +37,14 @@ button.primary:hover{background:#ffbe63;color:#120d05}
 .mission b{display:block;font-size:12px;letter-spacing:.3em;color:var(--amber);margin-bottom:6px}
 .mission p{margin:0;font:15px/1.55 system-ui,sans-serif;color:#c9d1d8}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font:13px/1.4 system-ui,sans-serif;color:var(--mute);margin-top:26px}
+.keys{position:fixed;right:max(24px,4vw);bottom:max(24px,4vh);display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font:13px/1.4 system-ui,sans-serif;color:var(--mute);background:rgba(6,9,12,.78);border:1px solid var(--line);padding:14px 16px;max-width:430px}
+.keys:before{content:"CONTROLS";grid-column:1/-1;font:600 11px var(--font);letter-spacing:.3em;color:var(--mute);margin-bottom:4px}
+#title{overflow-y:auto}
 .keys kbd{font:600 11px var(--font);letter-spacing:.08em;color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:2px 6px;background:rgba(255,255,255,.04);white-space:nowrap}
+.camp{margin:22px 0 18px;max-width:420px}.camp b{font-size:11px;letter-spacing:.3em;color:var(--mute)}.camp ol{list-style:none;margin:8px 0 0;padding:0;counter-reset:m}
+.camp li{counter-increment:m;display:flex;justify-content:space-between;gap:12px;font-size:14px;letter-spacing:.06em;color:#6c7882;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.camp li:before{content:counter(m,decimal-leading-zero);color:#4b555e;margin-right:10px;font-size:12px}.camp li span{margin-left:auto;font-size:10px;letter-spacing:.2em;align-self:center}
+.camp li.on{color:var(--ink)}.camp li.on span{color:var(--amber)}#bestLine{font:12px system-ui,sans-serif;color:var(--mute);margin-top:8px}
 .note{font:12px system-ui,sans-serif;color:#7c8a95;margin-top:16px}
 /* hud */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
@@ -109,7 +115,16 @@ button.primary:hover{background:#ffbe63;color:#120d05}
 <div id="title" class="overlay hidden"><div class="tbox">
   <div class="logo">AI <span>PARABELLUM</span></div><div class="tag">MISSION 1 · FALLEN CITY</div>
   <div class="mission"><b>BRIEFING</b><p>The AI took the city in one night. You hold a captured striker at the south end of the main street. Push north, break their patrols, and when one of their machines overheats, climb in and make it yours.</p></div>
-  <div class="row"><button id="bPlay" class="primary" type="button">DEPLOY</button><button id="bQual" type="button">QUALITY: HIGH</button><button id="bCredT" type="button">CREDITS</button></div>
+  <div class="row"><button id="bPlay" class="primary" type="button">MISSION 1 · FALLEN CITY</button><button id="bSurv" type="button">SURVIVAL</button></div>
+  <div class="camp"><b>CAMPAIGN</b><ol>
+    <li class="on">Fallen City <span id="m1s">READY</span></li>
+    <li>Desert Air Base <span>IN PRODUCTION</span></li>
+    <li>Frozen Dam <span>IN PRODUCTION</span></li>
+    <li>Container Port <span>IN PRODUCTION</span></li>
+    <li>Server Valley <span>IN PRODUCTION</span></li>
+    <li>The Core <span>IN PRODUCTION</span></li>
+  </ol><div id="bestLine"></div></div>
+  <div class="row"><button id="bQual" type="button">QUALITY: HIGH</button><button id="bCredT" type="button">CREDITS</button></div>
   <div class="keys">
     <kbd>W A S D</kbd><span>walk · <kbd>SHIFT</kbd> run</span>
     <kbd>MOUSE</kbd><span>aim (click the screen to lock it) · arrow keys also turn and walk</span>
