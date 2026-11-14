@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Parabellum: Look Test</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2305070a%27/%3E%3Cpath d=%27M16 5 27 27H5Z%27 fill=%27none%27 stroke=%27%23f2a541%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
+<style>
+:root{--ink:#e9edf0;--mute:#9aa7b2;--amber:#f2a541;--panel:rgba(10,14,18,.72);--font:"Chakra Petch","Arial Narrow",system-ui,sans-serif}
+html,body{margin:0;height:100%;background:#05070a;color:var(--ink);font-family:var(--font);overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#load{position:fixed;inset:0;display:grid;place-content:center;gap:18px;text-align:center;background:#05070a;z-index:5;transition:opacity .8s}
+#load.done{opacity:0;pointer-events:none}
+.logo{font-weight:700;font-size:clamp(32px,6vw,64px);letter-spacing:.08em}
+.logo span{color:var(--amber)}
+.tag{letter-spacing:.4em;font-size:13px;color:var(--mute)}
+.track{width:min(360px,70vw);height:3px;background:#1c242b;margin:0 auto}
+#bar{height:100%;width:0;background:var(--amber);transition:width .2s}
+#msg{font-size:12px;color:var(--mute);letter-spacing:.1em}
+#hud{position:fixed;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));pointer-events:none;z-index:3}
+.brand{font-weight:700;letter-spacing:.12em;font-size:15px;text-shadow:0 1px 8px #000}
+.brand small{display:block;font-weight:500;color:var(--mute);letter-spacing:.3em;font-size:10px}
+.btns{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;pointer-events:auto}
+button{font:600 12px var(--font);letter-spacing:.08em;color:var(--ink);background:var(--panel);border:1px solid #2c3842;border-radius:3px;padding:7px 11px;cursor:pointer;backdrop-filter:blur(4px)}
+button.on{border-color:var(--amber);color:var(--amber)}
+button:focus-visible{outline:2px solid var(--amber)}
+#cred{position:fixed;right:max(16px,env(safe-area-inset-right));top:60px;width:min(420px,calc(100vw - 32px));max-height:70vh;overflow:auto;background:rgba(8,11,14,.92);border:1px solid #2c3842;border-radius:4px;padding:14px 16px;z-index:4;font:13px/1.5 system-ui,sans-serif;color:var(--mute)}
+#cred h2{font:600 14px var(--font);letter-spacing:.12em;color:var(--ink);margin:0 0 8px}#cred a{color:#9fd3dc}#cred li{margin-bottom:4px}
+#cap{position:fixed;left:50%;bottom:max(26px,env(safe-area-inset-bottom));transform:translateX(-50%);font-size:13px;letter-spacing:.35em;color:#cfd6dc;text-shadow:0 1px 10px #000;white-space:nowrap;pointer-events:none;z-index:3;transition:opacity .6s}
+.bars::before,.bars::after{content:"";position:fixed;left:0;right:0;height:7vh;background:#000;z-index:2;pointer-events:none;transition:height .8s}
+.bars::before{top:0}.bars::after{bottom:0}
+.free::before,.free::after{height:0}
+</style>
+</head>
+<body class="bars">
+<canvas id="c"></canvas>
+<div id="load"><div class="logo">AI <span>PARABELLUM</span></div><div class="tag">PREPARE FOR WAR</div><div class="track"><div id="bar"></div></div><div id="msg">LOADING FALLEN CITY</div></div>
+<div id="hud">
+  <div class="brand">AI PARABELLUM<small>LOOK TEST · FALLEN CITY</small></div>
+  <div class="btns">
+    <button id="bCine" class="on" type="button">CINEMATIC</button>
+    <button id="bFree" type="button">FREE CAMERA</button>
+    <button id="bQual" type="button">QUALITY: HIGH</button>
+    <button id="bFull" type="button">FULL SCREEN</button>
+    <button id="bCred" type="button">CREDITS</button>
+  </div>
+</div>
+<div id="cap"></div>
+<div id="cred" hidden><h2>CREDITS</h2><ul id="credList"></ul><p>Models under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, compressed and recolored for the game. Sky, textures and props from <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a> (CC0). Built with three.js.</p></div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module" src="js/looktest.js"></script>
+</body>
+</html>
