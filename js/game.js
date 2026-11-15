@@ -689,7 +689,7 @@ function playerControl(dt) {
     if (m.edge && W.t - (player.edgeWarn || -99) > 6) { player.edgeWarn = W.t; showHint('AI defense grid. Machines cannot cross it. Turn back to the fight.', 3.5); sound.overheat(); } }
   // cannons with heat
   player.fireT -= dt;
-  const firing = keys.Space || keys.KeyF || mouseFire || tap.fire; tap.fire = false;
+  const firing = keys.Space || mouseFire || tap.fire; tap.fire = false;
   if (firing && !player.lock && player.fireT <= 0) {
     player.fireT = 0.1; const i = (m.armIdx ^= 1), from = m.muzzle(i), dir = player.aim.clone().sub(from).normalize();
     dir.add(V3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(0.006)).normalize();
@@ -963,9 +963,10 @@ function drawRadar() {
 const canvas = $('c');
 addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-  keys[e.code] = true; if (playing() && !e.repeat) { if (e.code === 'KeyQ') tap.rocket = true; if (e.code === 'KeyR') tap.reload = true; if (e.code === 'Space' || e.code === 'KeyF') tap.fire = true; }
+  keys[e.code] = true; if (playing() && !e.repeat) { if (e.code === 'KeyQ') tap.rocket = true; if (e.code === 'KeyR') tap.reload = true; if (e.code === 'Space') tap.fire = true; }
   if (mission.phase === 'intro' && mission.t > 0.8 && !['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) mission.t = mission.introLen;
   if (e.code === 'KeyM') toggleMute();
+  if (e.code === 'KeyF' && !e.repeat) toggleFull(false);
   if (e.code === 'Escape' && playing()) setPause(true); if (e.code === 'KeyP' && playing()) setPause(!paused);
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
@@ -978,7 +979,7 @@ canvas.addEventListener('mousedown', e => {
 addEventListener('mouseup', e => { if (e.button === 0) mouseFire = false; if (e.button === 2) mouseRocket = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('pointerlockchange', () => { const was = locked; locked = document.pointerLockElement === canvas; $('lockHint').classList.toggle('hidden', locked || !playing());
-  if (was && !locked && playing() && !mission.ended) setPause(true); });
+  if (was && !locked && playing() && !mission.ended && performance.now() - fullT > 1500) setPause(true); });
 addEventListener('mousemove', e => { if (!locked || paused) return; player.camYaw -= e.movementX * 0.0022; player.camPitch = clamp(player.camPitch - e.movementY * 0.0018, -0.42, 0.5); });
 function lockPointer() { try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch (e) {} }
 const playing = () => ['intro', 'fight', 'transfer'].includes(mission.phase) && !mission.ended;
@@ -986,6 +987,19 @@ const playing = () => ['intro', 'fight', 'transfer'].includes(mission.phase) && 
 /* ---------- menus ---------- */
 let paused = false;
 function setPause(v) { paused = v; $('pause').classList.toggle('hidden', !v); if (v) { mouseFire = mouseRocket = false; if (document.pointerLockElement) document.exitPointerLock(); } else lockPointer(); }
+// fullscreen (F or the buttons): the whole game page, which inside the site's iframe needs allow="fullscreen"
+let fullT = -1e9;
+const fullOk = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+function toggleFull(auto) {
+  if (!fullOk || (auto && document.fullscreenElement)) return; fullT = performance.now();
+  // starting a mission goes fullscreen unless the player switched it off with F or the button (remembered)
+  if (auto) { try { if (localStorage.getItem('aipNoFull') === '1') return; } catch (e) {} }
+  else { try { localStorage.setItem('aipNoFull', document.fullscreenElement ? '1' : '0'); } catch (e) {} }
+  try { const r = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen({navigationUI: 'hide'}); r?.catch?.(() => {}); } catch (e) {}
+}
+function fullLabel() { $('bFull').textContent = $('bFull2').textContent = document.fullscreenElement ? 'EXIT FULLSCREEN' : 'FULLSCREEN'; }
+for (const id of ['bFull', 'bFull2']) { $(id).hidden = !fullOk; $(id).onclick = () => toggleFull(); }
+document.addEventListener('fullscreenchange', () => { fullT = performance.now(); fullLabel(); });
 function toggleMute() { setMuted(!isMuted()); $('bMute').textContent = 'SOUND: ' + (isMuted() ? 'OFF' : 'ON'); }
 const qualLabel = () => 'QUALITY: ' + (settings.high ? 'HIGH' : 'LOW');
 for (const id of ['bQual', 'bQual2']) $(id).onclick = () => { setQuality(!settings.high); $('bQual').textContent = $('bQual2').textContent = qualLabel(); };
@@ -999,7 +1013,7 @@ $('bPlay').onclick = () => deploy('campaign'); $('bSurv').onclick = () => deploy
 function deploy(mode = 'campaign') {
   mission.mode = mode;
   if (mode === 'survival') { const m = player.mech, [x, z] = LV.survivalStart; m.pos.set(x, GROUND, z); m.heading = Math.PI; player.camYaw = Math.PI; m.place(); }
-  initAudio({rain: LV.weather === 'rain'}); sound.ui(); $('title').classList.add('hidden'); $('hud').classList.remove('hidden'); lockPointer();
+  initAudio({rain: LV.weather === 'rain'}); sound.ui(); $('title').classList.add('hidden'); $('hud').classList.remove('hidden'); toggleFull(true); lockPointer();
   mission.start();
 }
 function endGame(win, text) {
