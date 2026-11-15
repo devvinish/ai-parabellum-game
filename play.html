@@ -18,6 +18,7 @@ button{font:600 14px var(--font);letter-spacing:.12em;color:var(--ink);backgroun
 button:hover,button:focus-visible{border-color:var(--amber);color:var(--amber);outline:none}
 button.primary{background:var(--amber);color:#120d05;border-color:var(--amber);font-size:16px;padding:14px 34px}
 button.primary:hover{background:#ffbe63;color:#120d05}
+.row.opts{gap:8px}.row.opts button{padding:9px 12px;font-size:13px}
 .overlay{position:fixed;inset:0;display:grid;place-items:center;z-index:20;padding:24px}
 .hidden{display:none!important}
 /* loading */
@@ -119,7 +120,7 @@ button.primary:hover{background:#ffbe63;color:#120d05}
   <div class="mission"><b>BRIEFING</b><p id="brief">The AI took the city in one night. You hold a captured striker at the south end of the main street. Push north, break their patrols, and when one of their machines overheats, climb in and make it yours.</p></div>
   <div class="row"><button id="bPlay" class="primary" type="button">MISSION 1 · FALLEN CITY</button><button id="bSurv" type="button">SURVIVAL</button></div>
   <div class="camp"><b>CAMPAIGN</b><ol id="campList"></ol><div id="bestLine"></div></div>
-  <div class="row"><button id="bQual" type="button">QUALITY: HIGH</button><button id="bFull" type="button">FULLSCREEN</button><button id="bCredT" type="button">CREDITS</button></div>
+  <div class="row opts"><button id="bQual" type="button">QUALITY: HIGH</button><button id="bShake" type="button">SHAKE: FULL</button><button id="bFull" type="button">FULLSCREEN</button><button id="bCredT" type="button">CREDITS</button></div>
   <div class="keys">
     <kbd>W A S D</kbd><span>walk · <kbd>SHIFT</kbd> run</span>
     <kbd>MOUSE</kbd><span>aim (click the screen to lock it) · arrow keys also turn and walk</span>
@@ -155,6 +156,7 @@ button.primary:hover{background:#ffbe63;color:#120d05}
   <button id="bResume" class="primary" type="button">RESUME</button>
   <button id="bQual2" type="button">QUALITY: HIGH</button>
   <button id="bMute" type="button">SOUND: ON</button>
+  <button id="bShake2" type="button">SHAKE: FULL</button>
   <button id="bFull2" type="button">FULLSCREEN</button>
   <button id="bRestart" type="button">RESTART MISSION</button>
   <button id="bCredP" type="button">CREDITS</button>
@@ -162,7 +164,7 @@ button.primary:hover{background:#ffbe63;color:#120d05}
 
 <div id="end" class="overlay hidden"><div class="card"><h2 id="endT"></h2><p id="endP"></p><div class="st" id="endS"></div><div class="row"><button id="bNext" class="primary" type="button" hidden>NEXT</button><button id="bAgain" class="primary" type="button">PLAY AGAIN</button><button id="bCredE" type="button">CREDITS</button></div></div></div>
 
-<div id="cred" hidden><h2>CREDITS</h2><ul id="credList"></ul><p>Models under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, compressed and recolored for the game. Sky, textures and props from <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a> (CC0). Built with three.js. Sound is synthesised in the browser.</p><button id="bCredX" type="button">CLOSE</button></div>
+<div id="cred" hidden><h2>CREDITS</h2><ul id="credList"></ul><p>Models under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, compressed and recolored for the game. Sky, textures and props from <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a> (CC0). Built with three.js. Sound effects are CC0 recordings from OpenGameArt mixed with sound synthesised in the browser, which also makes the music.</p><button id="bCredX" type="button">CLOSE</button></div>
 
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}

@@ -780,7 +780,9 @@ function applyCamera(dt) {
     camera.position.copy(mid); camera.lookAt(look); return; }
   const r = camRig(player.mech, dt); camera.position.copy(r.pos); camera.lookAt(r.pos.clone().add(r.dir));
   // smooth rumble rather than a new random jump every frame
-  if (fx.shake > 0) { const s = Math.min(fx.shake, 1.2) * 0.22, t = W.t; camera.position.add(V3(Math.sin(t * 31) + 0.5 * Math.sin(t * 53 + 1.7), Math.sin(t * 37 + 0.9) + 0.5 * Math.sin(t * 61 + 2.3), Math.sin(t * 29 + 2.1)).multiplyScalar(s * 0.67)); }
+  // comfort setting: LOW drops the small step and shot bumps and halves the rest, OFF removes shake
+  const shk = shakeMode === 2 ? 0 : shakeMode === 1 ? (fx.shake < 0.12 ? 0 : fx.shake * 0.5) : fx.shake;
+  if (shk > 0) { const s = Math.min(shk, 1.2) * 0.22, t = W.t; camera.position.add(V3(Math.sin(t * 31) + 0.5 * Math.sin(t * 53 + 1.7), Math.sin(t * 37 + 0.9) + 0.5 * Math.sin(t * 61 + 2.3), Math.sin(t * 29 + 2.1)).multiplyScalar(s * 0.67)); }
 }
 
 /* ---------- mission ---------- */
@@ -1011,6 +1013,11 @@ addEventListener('message', e => {
   if (e.data.aip === 'fullstate' && e.origin === host) { hostFull = !!e.data.on; fullT = performance.now(); fullLabel(); }
 });
 function toggleMute() { setMuted(!isMuted()); $('bMute').textContent = 'SOUND: ' + (isMuted() ? 'OFF' : 'ON'); }
+// camera shake comfort setting (remembered): 0 full, 1 low, 2 off
+var shakeMode = 0; try { shakeMode = Math.max(0, Math.min(2, +localStorage.getItem('aipShake') || 0)); } catch (e) {}
+const shakeLabel = () => { $('bShake').textContent = $('bShake2').textContent = 'SHAKE: ' + ['FULL', 'LOW', 'OFF'][shakeMode]; };
+for (const id of ['bShake', 'bShake2']) $(id).onclick = () => { shakeMode = (shakeMode + 1) % 3; try { localStorage.setItem('aipShake', shakeMode); } catch (e) {} shakeLabel(); };
+shakeLabel();
 const qualLabel = () => 'QUALITY: ' + (settings.high ? 'HIGH' : 'LOW');
 for (const id of ['bQual', 'bQual2']) $(id).onclick = () => { setQuality(!settings.high); $('bQual').textContent = $('bQual2').textContent = qualLabel(); };
 $('bQual').textContent = $('bQual2').textContent = qualLabel();
