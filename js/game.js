@@ -987,19 +987,29 @@ const playing = () => ['intro', 'fight', 'transfer'].includes(mission.phase) && 
 /* ---------- menus ---------- */
 let paused = false;
 function setPause(v) { paused = v; $('pause').classList.toggle('hidden', !v); if (v) { mouseFire = mouseRocket = false; if (document.pointerLockElement) document.exitPointerLock(); } else lockPointer(); }
-// fullscreen (F or the buttons): the whole game page, which inside the site's iframe needs allow="fullscreen"
-let fullT = -1e9;
-const fullOk = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+// fullscreen (F or the buttons). On aiparabellum.com the game sits in an iframe: the site page says hello ('host'),
+// and then the site page itself goes fullscreen on request, so the browser's fullscreen notice names the site, not github.io
+let fullT = -1e9, host = null, hostFull = false;
+const HOSTS = ['https://aiparabellum.com', 'https://www.aiparabellum.com', 'http://127.0.0.1:8793'];
+const fullOk = () => !!host || !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const isFull = () => host ? hostFull : !!document.fullscreenElement;
 function toggleFull(auto) {
-  if (!fullOk || (auto && document.fullscreenElement)) return; fullT = performance.now();
+  if (!fullOk() || (auto && isFull())) return; fullT = performance.now();
   // starting a mission goes fullscreen unless the player switched it off with F or the button (remembered)
   if (auto) { try { if (localStorage.getItem('aipNoFull') === '1') return; } catch (e) {} }
-  else { try { localStorage.setItem('aipNoFull', document.fullscreenElement ? '1' : '0'); } catch (e) {} }
+  else { try { localStorage.setItem('aipNoFull', isFull() ? '1' : '0'); } catch (e) {} }
+  if (host) { parent.postMessage({aip: 'full', on: !isFull()}, host); return; }
   try { const r = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen({navigationUI: 'hide'}); r?.catch?.(() => {}); } catch (e) {}
 }
-function fullLabel() { $('bFull').textContent = $('bFull2').textContent = document.fullscreenElement ? 'EXIT FULLSCREEN' : 'FULLSCREEN'; }
-for (const id of ['bFull', 'bFull2']) { $(id).hidden = !fullOk; $(id).onclick = () => toggleFull(); }
+function fullLabel() { $('bFull').textContent = $('bFull2').textContent = isFull() ? 'EXIT FULLSCREEN' : 'FULLSCREEN'; for (const id of ['bFull', 'bFull2']) $(id).hidden = !fullOk(); }
+for (const id of ['bFull', 'bFull2']) $(id).onclick = () => toggleFull();
+fullLabel();
 document.addEventListener('fullscreenchange', () => { fullT = performance.now(); fullLabel(); });
+addEventListener('message', e => {
+  if (e.source !== parent || parent === window || !HOSTS.includes(e.origin) || !e.data) return;
+  if (e.data.aip === 'host') { host = e.origin; fullLabel(); }
+  if (e.data.aip === 'fullstate' && e.origin === host) { hostFull = !!e.data.on; fullT = performance.now(); fullLabel(); }
+});
 function toggleMute() { setMuted(!isMuted()); $('bMute').textContent = 'SOUND: ' + (isMuted() ? 'OFF' : 'ON'); }
 const qualLabel = () => 'QUALITY: ' + (settings.high ? 'HIGH' : 'LOW');
 for (const id of ['bQual', 'bQual2']) $(id).onclick = () => { setQuality(!settings.high); $('bQual').textContent = $('bQual2').textContent = qualLabel(); };
